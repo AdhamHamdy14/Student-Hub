@@ -1,0 +1,8 @@
+.env
+__pycache__/
+.vscode/
+*.pyc
+*.xlsx
+tests/
+venv/
+.venv/
