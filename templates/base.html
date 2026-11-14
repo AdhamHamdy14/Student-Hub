@@ -28,9 +28,9 @@
       <span class="brand-pill">FOE-AU</span>
     </div>
     <nav class="nav-links">
-      <a href="#" class="nav-link active">Home</a>
+      <a href="{{ url_for('home') }}" class="nav-link{% if request.endpoint == 'home' %} active{% endif %}">Home</a>
       <a href="#" class="nav-link">Labs</a>
-      <a href="#" class="nav-link">Events</a>
+      <a href="{{ url_for('events') }}" class="nav-link{% if request.endpoint in ['events', 'event_details', 'event_registered'] %} active{% endif %}">Events</a>
       <a href="#" class="nav-link">Used Items</a>
       <a href="#" class="nav-link">Lost &amp; Found</a>
     </nav>
