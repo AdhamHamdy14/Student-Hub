@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Student Hub - {{ event.event_name }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/events.css') }}">
+<script src="{{ url_for('static', filename='app/js/events.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="events-container">
+  <a href="{{ url_for('events_pages.events') }}" class="back-link">← Back to all events</a>
+
+  <div class="details-layout">
+    <!-- Left Column: Event Overview & Agenda -->
+    <div class="details-main-card">
+      <div class="event-badges">
+        <span class="event-category-tag">{{ event.category or 'Event' }}</span>
+        {% if event.registration_status == 'open' %}
+          <span class="status-badge status-open">Registration Open</span>
+        {% else %}
+          <span class="status-badge status-closed">{{ event.registration_status|capitalize }}</span>
+        {% endif %}
+      </div>
+
+      <h1 class="details-title">{{ event.event_name }}</h1>
+      <p class="details-organizer">Organized by <strong>{{ event.organizer }}</strong></p>
+
+      <div class="details-info-grid">
+        <div class="info-tile">
+          <svg class="tile-icon"><use href="#cal"></use></svg>
+          <div>
+            <span class="tile-label">Date</span>
+            <strong class="tile-value">{{ event.date.strftime('%A, %d %b %Y') if event.date else 'TBA' }}</strong>
+          </div>
+        </div>
+
+        <div class="info-tile">
+          <svg class="tile-icon"><use href="#clock"></use></svg>
+          <div>
+            <span class="tile-label">Time</span>
+            <strong class="tile-value">
+              {% if event.start_time and event.end_time %}
+                {{ event.start_time.strftime('%I:%M %p') }} – {{ event.end_time.strftime('%I:%M %p') }}
+              {% else %}
+                TBA
+              {% endif %}
+            </strong>
+          </div>
+        </div>
+
+        <div class="info-tile">
+          <svg class="tile-icon"><use href="#pin"></use></svg>
+          <div>
+            <span class="tile-label">Venue</span>
+            <strong class="tile-value">{{ event.location }}</strong>
+          </div>
+        </div>
+
+        <div class="info-tile">
+          <svg class="tile-icon"><use href="#doc"></use></svg>
+          <div>
+            <span class="tile-label">Seats Available</span>
+            <strong class="tile-value">
+              {% if seats_left is not none %}
+                {{ seats_left }} / {{ event.capacity }} Seats
+              {% else %}
+                {{ event.capacity or 'Unlimited' }} Seats
+              {% endif %}
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agenda Section from Supabase -->
+      <div class="agenda-section">
+        <h2 class="section-heading">Event Agenda</h2>
+        {% if event.agenda %}
+          <ul class="agenda-list">
+            {% for line in event.agenda.splitlines() %}
+              {% if line.strip() %}
+                <li class="agenda-item">{{ line.strip() }}</li>
+              {% endif %}
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted-text">Detailed session schedule will be announced by {{ event.organizer }} prior to the event.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Right Column: Student Registration Sidebar -->
+    <aside class="details-sidebar-card">
+      <h2 class="sidebar-title">Reserve Your Seat</h2>
+      <p class="sidebar-subtitle">Registering as a verified FOE-AU student:</p>
+
+      <div class="attendee-summary">
+        <div class="attendee-row">
+          <span>Full Name</span>
+          <strong>{{ g.current_user.name }}</strong>
+        </div>
+        <div class="attendee-row">
+          <span>University Email</span>
+          <strong>{{ g.current_user.primary_email }}</strong>
+        </div>
+        {% if g.current_user.department %}
+        <div class="attendee-row">
+          <span>Department</span>
+          <strong>{{ g.current_user.department }}</strong>
+        </div>
+        {% endif %}
+        {% if g.current_user.student_id %}
+        <div class="attendee-row">
+          <span>Student ID</span>
+          <strong>{{ g.current_user.student_id }}</strong>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if is_registered %}
+        <div class="already-registered-box">
+          ✓ You are already registered for this event.
+        </div>
+        <a href="{{ url_for('events_pages.event_registered', event_id=event.id) }}" class="btn-event-primary btn-full">
+          View Confirmation Pass
+        </a>
+        <form action="{{ url_for('events_pages.cancel_registration', event_id=event.id) }}" method="POST" style="margin-top: 10px;">
+          <button type="submit" class="btn-event-secondary btn-full">
+            Cancel Registration
+          </button>
+        </form>
+      {% elif event.registration_status == 'open' %}
+        <form action="{{ url_for('events_pages.event_details', event_id=event.id) }}" method="POST" class="register-form">
+          <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #374151; cursor: pointer;">
+              <input type="checkbox" name="reminder" value="1" checked>
+              <span>Send me a reminder before the event</span>
+            </label>
+          </div>
+
+          <button type="submit" class="btn-event-primary btn-full">
+            Confirm Registration
+          </button>
+        </form>
+      {% else %}
+        <button type="button" class="btn-disabled btn-full" disabled>
+          Registration Closed
+        </button>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+{% endblock %}
