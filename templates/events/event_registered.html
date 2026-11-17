@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Student Hub - Registration Confirmed{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/events.css') }}">
+<script src="{{ url_for('static', filename='app/js/events.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="events-container confirmation-wrapper">
+  <div class="confirmation-card">
+    <div class="success-icon-circle">✓</div>
+
+    <span class="status-badge status-open">Confirmed Spot</span>
+    <h1 class="confirmation-title">You're Registered!</h1>
+    <p class="confirmation-subtitle">
+      Your seat for <strong>{{ event.event_name }}</strong> has been reserved. Present your student ID at the entrance.
+    </p>
+
+    <div class="ticket-box">
+      <div class="ticket-row">
+        <span class="ticket-label">Attendee</span>
+        <span class="ticket-value">{{ g.current_user.name }} ({{ g.current_user.student_id or 'FOE-AU' }})</span>
+      </div>
+      <div class="ticket-row">
+        <span class="ticket-label">Event</span>
+        <span class="ticket-value">{{ event.event_name }}</span>
+      </div>
+      <div class="ticket-row">
+        <span class="ticket-label">Organizer</span>
+        <span class="ticket-value">{{ event.organizer }}</span>
+      </div>
+      <div class="ticket-row">
+        <span class="ticket-label">Date &amp; Time</span>
+        <span class="ticket-value">
+          {{ event.date.strftime('%d %b %Y') if event.date else 'TBA' }}
+          {% if event.start_time and event.end_time %}
+            • {{ event.start_time.strftime('%I:%M %p') }} – {{ event.end_time.strftime('%I:%M %p') }}
+          {% endif %}
+        </span>
+      </div>
+      <div class="ticket-row">
+        <span class="ticket-label">Location</span>
+        <span class="ticket-value">{{ event.location }}</span>
+      </div>
+    </div>
+
+    <div class="confirmation-actions">
+      <a href="{{ url_for('events_pages.events') }}" class="btn-event-primary">Browse More Events</a>
+      <a href="{{ url_for('home') }}" class="btn-event-secondary">Back to Home</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
