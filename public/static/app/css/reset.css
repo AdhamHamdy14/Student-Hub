@@ -1,0 +1,94 @@
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.otp {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+.otp input {
+  padding: 0;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.resend {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.resend button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: 600 13px var(--font);
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.resend button:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-wrap input {
+  padding-right: 64px;
+}
+
+.toggle {
+  position: absolute;
+  right: 14px;
+  background: none;
+  border: 0;
+  padding: 4px;
+  font: 600 12px var(--font);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  color: var(--ink);
+}
+
+.hint {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+  margin-top: -12px;
+}

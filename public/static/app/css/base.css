@@ -44,15 +44,16 @@ svg {
 .brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 4px;
 }
 
 .logo {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
   background: radial-gradient(circle at 50% 40%, #E8C877, #B8862B 70%, #7A5416);
-  border: 2px solid #D9A93F;
+  display: block;
+  background: transparent;
 }
 
 .brand-name {
@@ -121,6 +122,32 @@ svg {
   justify-content: center;
 }
 
+.user-details {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.user-role {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.logout-form {
+  margin: 0 0 0 4px;
+}
+
+.logout-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--blue);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .page {
   padding: 38px 56px 28px;
   display: flex;
@@ -144,7 +171,7 @@ svg {
   width: 330px;
   height: 330px;
   border-radius: 50%;
-  background: rgba(255,255,255,.07);
+  background: rgba(255, 255, 255, .07);
   right: 118px;
   top: 100px;
 }
@@ -155,19 +182,19 @@ svg {
   width: 360px;
   height: 360px;
   border-radius: 50%;
-  background: rgba(255,255,255,.06);
+  background: rgba(255, 255, 255, .06);
   right: 18px;
   top: -150px;
 }
 
-.hero > * {
+.hero>* {
   position: relative;
   z-index: 1;
 }
 
 .hero-pill {
   display: inline-block;
-  background: rgba(255,255,255,.14);
+  background: rgba(255, 255, 255, .14);
   font-size: 13px;
   font-weight: 600;
   padding: 7px 12px;
@@ -185,7 +212,7 @@ svg {
   font-size: 16px;
   line-height: 1.6;
   max-width: 560px;
-  color: rgba(255,255,255,.92);
+  color: rgba(255, 255, 255, .92);
 }
 
 .stats {
@@ -359,7 +386,7 @@ svg {
   color: #4B5563;
 }
 
-.meta + .meta {
+.meta+.meta {
   margin-top: 8px;
 }
 

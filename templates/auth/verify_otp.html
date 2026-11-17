@@ -1,0 +1,63 @@
+{% extends "auth/auth_base.html" %}
+
+{% block title %}Verify code – Student Hub{% endblock %}
+{% block card_attrs %}aria-labelledby="title"{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='app/css/reset.css') }}">
+{% endblock %}
+
+{% block auth_content %}
+  <a class="back-link" href="{{ url_for('auth_pages.forgot_password') }}">&larr; Change email</a>
+
+  <header class="welcome">
+    <h1 id="title">Enter verification code</h1>
+    <p>We sent a 6-digit code to your email address.</p>
+  </header>
+
+  <form class="login-form" action="{{ url_for('auth_pages.verify_otp') }}" method="post">
+    <fieldset class="otp">
+      <legend class="sr">6-digit verification code</legend>
+      <input type="text" name="digits" inputmode="numeric" pattern="[0-9]" maxlength="1" autocomplete="one-time-code" aria-label="Digit 1" required autofocus>
+      <input type="text" name="digits" inputmode="numeric" pattern="[0-9]" maxlength="1" aria-label="Digit 2" required>
+      <input type="text" name="digits" inputmode="numeric" pattern="[0-9]" maxlength="1" aria-label="Digit 3" required>
+      <input type="text" name="digits" inputmode="numeric" pattern="[0-9]" maxlength="1" aria-label="Digit 4" required>
+      <input type="text" name="digits" inputmode="numeric" pattern="[0-9]" maxlength="1" aria-label="Digit 5" required>
+      <input type="text" name="digits" inputmode="numeric" pattern="[0-9]" maxlength="1" aria-label="Digit 6" required>
+    </fieldset>
+
+    <p class="resend">
+      <span>Didn't receive the code?</span>
+      <button
+        type="submit"
+        id="resend-btn"
+        formaction="{{ url_for('auth_pages.resend_otp') }}"
+        formnovalidate
+      >Resend code</button>
+    </p>
+
+    <button class="btn-primary" type="submit">Verify code</button>
+  </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const boxes = [...document.querySelectorAll('.otp input')];
+  boxes.forEach((box, i) => {
+    box.addEventListener('input', () => {
+      box.value = box.value.replace(/\D/g, '');
+      if (box.value && boxes[i + 1]) boxes[i + 1].focus();
+    });
+    box.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !box.value && boxes[i - 1]) boxes[i - 1].focus();
+    });
+    box.addEventListener('paste', e => {
+      const d = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+      if (!d) return;
+      e.preventDefault();
+      [...d].forEach((c, k) => { boxes[k].value = c; });
+      boxes[Math.min(d.length, 5)].focus();
+    });
+  });
+</script>
+{% endblock %}

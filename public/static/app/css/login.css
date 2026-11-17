@@ -1,0 +1,17 @@
+.logo {
+  display: block;
+  width: 128px;
+  height: 182px;
+  margin: 0 auto;
+}
+
+.reset-link {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+}
+.reset-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}

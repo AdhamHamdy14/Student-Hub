@@ -1,11 +1,12 @@
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, render_template
+from flask import Flask
 from flask_migrate import Migrate
 from sqlalchemy import text
 
 from models import Profile, db
+from routes.auth_pages import auth_pages
 
 load_dotenv()
 
@@ -16,6 +17,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 migrate = Migrate(app, db)
+app.register_blueprint(auth_pages)
 
 
 @app.route("/health")
@@ -24,15 +26,6 @@ def health_check():
     users_count = Profile.query.count()
     return {"status": "connected", "profiles_count": users_count}
 
-
-@app.get("/")
-def home():
-    return render_template("home.html")
-
-
-@app.get("/events")
-def events():
-    return render_template("events.html")
 
 
 if __name__ == "__main__":

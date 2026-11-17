@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Student Hub{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo1.png') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -22,19 +23,28 @@
   </svg>
 
   <header class="navbar">
-    <div class="brand">
-      <div class="logo"></div>
+    <a href="{{ url_for('home') }}" class="brand" style="text-decoration: none;">
+      <img src="{{ url_for('static', filename='images/logo1.png') }}" alt="Student Hub Logo" class="logo">
       <span class="brand-name">Student Hub</span>
       <span class="brand-pill">FOE-AU</span>
-    </div>
+    </a>
     <nav class="nav-links">
       <a href="{{ url_for('home') }}" class="nav-link{% if request.endpoint == 'home' %} active{% endif %}">Home</a>
-      <a href="#" class="nav-link">Labs</a>
+      <a href="{{ url_for('labs') }}" class="nav-link{% if request.endpoint == 'labs' %} active{% endif %}">Labs</a>
       <a href="{{ url_for('events') }}" class="nav-link{% if request.endpoint in ['events', 'event_details', 'event_registered'] %} active{% endif %}">Events</a>
       <a href="#" class="nav-link">Used Items</a>
       <a href="#" class="nav-link">Lost &amp; Found</a>
     </nav>
-    <div class="user-pill"><div class="avatar">U</div><span>User</span></div>
+    <div class="user-pill">
+      <div class="avatar">{{ g.current_user.name[:1]|upper }}</div>
+      <div class="user-details">
+        <span>{{ g.current_user.name }}</span>
+        <small class="user-role">{{ g.current_user.role|replace('_', ' ')|title }}</small>
+      </div>
+      <form class="logout-form" action="{{ url_for('auth_pages.logout') }}" method="post">
+        <button class="logout-button" type="submit">Log out</button>
+      </form>
+    </div>
   </header>
 
   <main class="page">

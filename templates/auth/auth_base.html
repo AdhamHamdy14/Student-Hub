@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Student Hub{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo1.png') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app/css/auth_base.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+
+<body>
+  <main class="login-page">
+    <section class="login-card" {% block card_attrs %}{% endblock %}>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash-msg {{ category }}" role="alert">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% block auth_content %}{% endblock %}
+
+      <nav class="legal" aria-label="Legal and help">
+        <a href="#">Privacy &amp; Policy</a>
+        <span aria-hidden="true">-</span>
+        <a href="#">User guide</a>
+        <span aria-hidden="true">-</span>
+        <a href="#">Terms of services</a>
+      </nav>
+    </section>
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

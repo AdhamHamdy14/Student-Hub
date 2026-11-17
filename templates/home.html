@@ -5,7 +5,7 @@
 {% block content %}
 <section class="hero">
   <span class="hero-pill">🎓 Faculty of Engineering • Alexandria University</span>
-  <h1>Welcome back, User</h1>
+  <h1>Welcome back, {{ g.current_user.name }}</h1>
   <p>Book open engineering labs, register for student workshops, exchange used kits, or check lost &amp; found reports—all in one place.</p>
 </section>
 
