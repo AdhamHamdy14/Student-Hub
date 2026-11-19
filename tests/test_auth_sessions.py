@@ -15,6 +15,8 @@ os.environ["DATABASE_URL"] = "sqlite://"
 from app import app
 from models import Event, Lab, LabSlot, PasswordReset, Profile, db, utc_now
 from services.password_reset_email import (
+    GMAIL_SMTP_PORT,
+    GMAIL_SMTP_SERVER,
     OUTLOOK_SMTP_PORT,
     OUTLOOK_SMTP_SERVER,
     send_password_reset_email,
@@ -391,6 +393,26 @@ class AuthenticationSessionTests(unittest.TestCase):
         self.assertEqual(sent_message["To"], "student@example.com")
         self.assertIn("123456", sent_message.get_body(preferencelist=("plain",)).get_content())
 
+    def test_password_reset_mail_uses_gmail_starttls(self):
+        app.config["MAIL_EMAIL"] = "studenthub@gmail.com"
+        app.config["MAIL_APP_PASSWORD"] = "test-gmail-app-password"
+
+        with app.test_request_context("/"):
+            with patch("services.password_reset_email.smtplib.SMTP") as smtp_factory:
+                send_password_reset_email("student@example.com", "123456")
+
+        smtp_factory.assert_called_once_with(
+            GMAIL_SMTP_SERVER,
+            GMAIL_SMTP_PORT,
+            timeout=15,
+        )
+        smtp = smtp_factory.return_value.__enter__.return_value
+        smtp.starttls.assert_called_once()
+        smtp.login.assert_called_once_with(
+            "studenthub@gmail.com",
+            "test-gmail-app-password",
+        )
+
     def test_admin_can_assign_ta_department_role(self):
         with app.app_context():
             admin = db.session.get(Profile, 1)
@@ -429,6 +451,96 @@ class AuthenticationSessionTests(unittest.TestCase):
             profile = db.session.get(Profile, 2)
             self.assertEqual(profile.role, "ta:ARC")
 
+    def test_admin_can_edit_existing_account_details_and_password(self):
+        with app.app_context():
+            admin = db.session.get(Profile, 1)
+            admin.role = "admin"
+            db.session.add(
+                Profile(
+                    id=2,
+                    name="Existing Student",
+                    primary_email="existing@example.com",
+                    password_hash=generate_password_hash("password123"),
+                    role="student",
+                    department="MIE",
+                    tokens="active-session-token",
+                )
+            )
+            db.session.commit()
+
+        admin_client = app.test_client()
+        self.login(admin_client)
+        admin_client.get("/admin/roles/")
+        with admin_client.session_transaction() as auth_session:
+            csrf = auth_session["_csrf_token"]
+
+        response = admin_client.post(
+            "/admin/roles/2/edit",
+            data={
+                "name": "Updated Account",
+                "email": "updated@example.com",
+                "secondary_email": "backup@example.com",
+                "phone_number": "+201234567890",
+                "student_id": "UNI-2002",
+                "department": "CSE",
+                "role": "ta:CSE",
+                "password": "NewSecurePassword123",
+                "_csrf_token": csrf,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        with app.app_context():
+            profile = db.session.get(Profile, 2)
+            self.assertEqual(profile.name, "Updated Account")
+            self.assertEqual(profile.primary_email, "updated@example.com")
+            self.assertEqual(profile.secondary_email, "backup@example.com")
+            self.assertEqual(profile.phone_number, "+201234567890")
+            self.assertEqual(profile.student_id, "UNI-2002")
+            self.assertEqual(profile.role, "ta:CSE")
+            self.assertEqual(profile.department, "CSE")
+            self.assertTrue(
+                check_password_hash(profile.password_hash, "NewSecurePassword123")
+            )
+            self.assertIsNone(profile.tokens)
+
+    def test_admin_account_edit_rejects_duplicate_contact_email(self):
+        with app.app_context():
+            admin = db.session.get(Profile, 1)
+            admin.role = "admin"
+            db.session.add(
+                Profile(
+                    id=2,
+                    name="Existing Student",
+                    primary_email="existing@example.com",
+                    password_hash=generate_password_hash("password123"),
+                    department="MIE",
+                )
+            )
+            db.session.commit()
+
+        admin_client = app.test_client()
+        self.login(admin_client)
+        admin_client.get("/admin/roles/")
+        with admin_client.session_transaction() as auth_session:
+            csrf = auth_session["_csrf_token"]
+
+        response = admin_client.post(
+            "/admin/roles/2/edit",
+            data={
+                "name": "Existing Student",
+                "email": "student@example.com",
+                "department": "MIE",
+                "role": "student",
+                "_csrf_token": csrf,
+            },
+            follow_redirects=True,
+        )
+        self.assertIn(b"already associated with another account", response.data)
+        with app.app_context():
+            profile = db.session.get(Profile, 2)
+            self.assertEqual(profile.primary_email, "existing@example.com")
+
     def test_admin_can_create_account_with_hashed_password_and_role(self):
         with app.app_context():
             profile = db.session.get(Profile, 1)
@@ -453,6 +565,7 @@ class AuthenticationSessionTests(unittest.TestCase):
             roles_page.data.index(b">Manage Roles</a>"),
         )
         self.assertIn(b'class="role-row"', roles_page.data)
+        self.assertIn(b">Edit</button>", roles_page.data)
         self.assertIn(b"Save changes", roles_page.data)
         css_response = admin_client.get("/static/app/css/admin-roles.css")
         self.assertEqual(css_response.status_code, 200)

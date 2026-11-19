@@ -127,7 +127,7 @@
   min-width: 0;
   padding: 18px 20px;
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(140px, 0.7fr) minmax(320px, 1.5fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(140px, 0.7fr) auto;
   align-items: center;
   gap: 20px;
   background: #fff;
@@ -187,35 +187,9 @@
   white-space: nowrap;
 }
 
-.role-row form {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.role-row form label {
-  color: #374151;
-  font-size: 13px;
-}
-
-.role-row form select {
-  width: 100%;
-  min-width: 0;
+.role-edit-trigger {
   min-height: 42px;
-  padding: 0 10px;
-  color: #111827;
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 13px;
-}
-
-.role-row form button {
-  min-height: 42px;
-  padding: 0 14px;
+  padding: 0 18px;
   color: #fff;
   background: #1d4ed8;
   border: 0;
@@ -227,12 +201,11 @@
   cursor: pointer;
 }
 
-.role-row form button:hover {
+.role-edit-trigger:hover {
   background: #1e40af;
 }
 
-.role-row form select:focus-visible,
-.role-row form button:focus-visible {
+.role-edit-trigger:focus-visible {
   outline: 2px solid #1d4ed8;
   outline-offset: 2px;
 }
@@ -378,11 +351,7 @@
     padding: 16px;
   }
 
-  .role-row form {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .role-row form label {
-    grid-column: 1 / -1;
+  .role-edit-trigger {
+    width: 100%;
   }
 }

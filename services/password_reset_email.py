@@ -6,6 +6,8 @@ from flask import current_app, render_template
 
 OUTLOOK_SMTP_SERVER = "smtp-mail.outlook.com"
 OUTLOOK_SMTP_PORT = 587
+GMAIL_SMTP_SERVER = "smtp.gmail.com"
+GMAIL_SMTP_PORT = 587
 
 
 class PasswordResetEmailError(Exception):
@@ -19,6 +21,16 @@ def send_password_reset_email(recipient, code):
         raise PasswordResetEmailError(
             "MAIL_EMAIL and MAIL_APP_PASSWORD must be configured."
         )
+
+    sender_address = sender.strip().lower()
+    if sender_address.endswith("@gmail.com") or sender_address.endswith("@googlemail.com"):
+        smtp_server = GMAIL_SMTP_SERVER
+        smtp_port = GMAIL_SMTP_PORT
+        provider_name = "Gmail"
+    else:
+        smtp_server = OUTLOOK_SMTP_SERVER
+        smtp_port = OUTLOOK_SMTP_PORT
+        provider_name = "Outlook"
 
     message = EmailMessage()
     message["Subject"] = "Student Hub password reset code"
@@ -34,11 +46,11 @@ def send_password_reset_email(recipient, code):
     )
 
     try:
-        with smtplib.SMTP(OUTLOOK_SMTP_SERVER, OUTLOOK_SMTP_PORT, timeout=15) as smtp:
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as smtp:
             smtp.ehlo()
             smtp.starttls(context=ssl.create_default_context())
             smtp.ehlo()
             smtp.login(sender.strip(), password.strip())
             smtp.send_message(message)
     except (OSError, smtplib.SMTPException) as error:
-        raise PasswordResetEmailError("Outlook SMTP delivery failed.") from error
+        raise PasswordResetEmailError(f"{provider_name} SMTP delivery failed.") from error

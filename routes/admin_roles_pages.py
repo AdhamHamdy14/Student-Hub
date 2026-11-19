@@ -1,7 +1,7 @@
 import re
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
@@ -35,6 +35,7 @@ def index():
         profiles=profiles,
         role_choices=ROLE_CHOICES,
         departments=FOE_DEPARTMENTS,
+        department_codes={code for code, _ in FOE_DEPARTMENTS},
     )
 
 
@@ -133,4 +134,147 @@ def update_role(profile_id):
     profile.role = new_role
     db.session.commit()
     flash(f"Role updated for {profile.primary_email}.", "success")
+    return redirect(url_for("admin_roles_pages.index"))
+
+
+@admin_roles_pages.post("/<int:profile_id>/edit")
+@csrf_protect
+def edit_account(profile_id):
+    profile = db.session.get(Profile, profile_id)
+    if profile is None:
+        abort(404)
+
+    name = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip().lower()
+    phone_number = request.form.get("phone_number", "").strip() or None
+    secondary_email = request.form.get("secondary_email", "").strip().lower() or None
+    student_id = request.form.get("student_id", "").strip() or None
+    department = request.form.get("department", "").strip()
+    role = request.form.get("role", "")
+    password = request.form.get("password", "")
+
+    if not name or len(name) > 255:
+        flash("Enter a name up to 255 characters.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if (
+        len(email) > 255
+        or re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email) is None
+    ):
+        flash("Enter a valid email address.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if role not in ROLE_VALUES:
+        flash("Choose a valid role.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if phone_number is not None and len(phone_number) > 255:
+        flash("Phone number must be 255 characters or fewer.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if secondary_email is not None and (
+        len(secondary_email) > 255
+        or re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", secondary_email) is None
+    ):
+        flash("Enter a valid secondary email address.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if secondary_email == email:
+        flash("The secondary email must differ from the primary email.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if student_id is not None and len(student_id) > 255:
+        flash("University ID must be 255 characters or fewer.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if (
+        department not in {code for code, _ in FOE_DEPARTMENTS}
+        and department != profile.department
+    ):
+        flash("Choose a valid department.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if password and not password_meets_policy(password):
+        flash("Password must be at least 8 characters with 1 number or symbol.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+
+    email_owner = Profile.query.filter(
+        Profile.id != profile.id,
+        or_(
+            func.lower(Profile.primary_email) == email,
+            func.lower(Profile.secondary_email) == email,
+        ),
+    ).first()
+    if email_owner:
+        flash("That email address is already associated with another account.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+
+    if secondary_email and Profile.query.filter(
+        Profile.id != profile.id,
+        or_(
+            func.lower(Profile.primary_email) == secondary_email,
+            func.lower(Profile.secondary_email) == secondary_email,
+        ),
+    ).first():
+        flash("That email address is already associated with another account.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+
+    if student_id and Profile.query.filter(
+        Profile.id != profile.id,
+        Profile.student_id == student_id,
+    ).first():
+        flash("An account with that University ID already exists.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+
+    if phone_number and Profile.query.filter(
+        Profile.id != profile.id,
+        Profile.phone_number == phone_number,
+    ).first():
+        flash("That phone number is already associated with another account.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+
+    if profile.id == g.current_user.id and role != ADMIN_ROLE:
+        flash("You cannot change your own administrator role.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if (
+        profile.role == ADMIN_ROLE
+        and role != ADMIN_ROLE
+        and Profile.query.filter_by(role=ADMIN_ROLE).count() <= 1
+    ):
+        flash("The last administrator cannot be demoted.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+
+    profile.name = name
+    profile.primary_email = email
+    profile.secondary_email = secondary_email
+    profile.phone_number = phone_number
+    profile.student_id = student_id
+    profile.department = ta_department_for_role(role) or department
+    profile.role = role
+    if password:
+        profile.password_hash = generate_password_hash(password)
+        profile.tokens = None
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        if Profile.query.filter(
+            Profile.id != profile.id,
+            or_(
+                func.lower(Profile.primary_email) == email,
+                func.lower(Profile.secondary_email) == email,
+                func.lower(Profile.primary_email) == secondary_email,
+                func.lower(Profile.secondary_email) == secondary_email,
+            ),
+        ).first():
+            flash("That email address is already associated with another account.", "error")
+            return redirect(url_for("admin_roles_pages.index"))
+        if student_id and Profile.query.filter(
+            Profile.id != profile.id,
+            Profile.student_id == student_id,
+        ).first():
+            flash("An account with that University ID already exists.", "error")
+            return redirect(url_for("admin_roles_pages.index"))
+        if phone_number and Profile.query.filter(
+            Profile.id != profile.id,
+            Profile.phone_number == phone_number,
+        ).first():
+            flash("That phone number is already associated with another account.", "error")
+            return redirect(url_for("admin_roles_pages.index"))
+        raise
+
+    flash(f"Account updated for {email}.", "success")
     return redirect(url_for("admin_roles_pages.index"))

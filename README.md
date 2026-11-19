@@ -24,9 +24,10 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 Put the generated value in `.env` as `SECRET_KEY=<generated-value>`. Keep it
 private and stable across deployments; changing it signs out existing sessions.
 
-For password-reset emails, set `MAIL_EMAIL` to the Outlook sender account and
-`MAIL_APP_PASSWORD` to that account's app password. The app sends mail through
-Outlook SMTP with STARTTLS. SMTP AUTH must be enabled for the sender account.
+For password-reset emails, set `MAIL_EMAIL` to a Gmail or Outlook sender account
+and `MAIL_APP_PASSWORD` to that account's app password. Gmail addresses use
+Gmail SMTP and Outlook, Hotmail, Live, and MSN addresses use Outlook SMTP.
+Both providers use STARTTLS, and SMTP AUTH must be enabled for the sender account.
 
 Authenticated sessions use a per-login token, allow only one active device per
 account (a new login invalidates the previous device), and expire after one

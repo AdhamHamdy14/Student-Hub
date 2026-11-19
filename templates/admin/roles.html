@@ -9,7 +9,7 @@
 {% block content %}
 <section class="page-header">
   <h1>Manage Roles</h1>
-  <p>Assign a role to each existing account. TA roles grant access only to labs in the matching department.</p>
+  <p>Edit account details and access. TA roles grant access only to labs in the matching department.</p>
 </section>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -90,7 +90,7 @@
   <header class="role-list-header">
     <div>
       <h2>Existing accounts</h2>
-      <p>Review account roles and update access as needed.</p>
+      <p>Review and edit account details and access.</p>
     </div>
     <span class="role-count">{{ profiles|length }} {{ "account" if profiles|length == 1 else "accounts" }}</span>
   </header>
@@ -104,19 +104,82 @@
         <span class="role-current-label">Current role</span>
         <strong>{{ role_label(profile.role) }}</strong>
       </div>
-      <form method="post" action="{{ url_for('admin_roles_pages.update_role', profile_id=profile.id) }}">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-        <label for="role-{{ profile.id }}">New role</label>
-        <select id="role-{{ profile.id }}" name="role" required>
-          {% for choice in role_choices %}
-            <option value="{{ choice.value }}" {% if profile.role == choice.value %}selected{% endif %}>
-              {{ choice.label }}
-            </option>
-          {% endfor %}
-        </select>
-        <button type="submit">Save changes</button>
-      </form>
+      <button
+        class="role-edit-trigger"
+        type="button"
+        data-edit-dialog="edit-account-dialog-{{ profile.id }}"
+        aria-haspopup="dialog"
+        aria-controls="edit-account-dialog-{{ profile.id }}"
+      >Edit</button>
     </article>
+
+    <dialog
+      class="role-create-dialog"
+      id="edit-account-dialog-{{ profile.id }}"
+      aria-labelledby="edit-account-title-{{ profile.id }}"
+    >
+      <div class="role-dialog-header">
+        <div>
+          <h2 id="edit-account-title-{{ profile.id }}">Edit account</h2>
+          <p>Update account details. Leave the password blank to keep it unchanged.</p>
+        </div>
+        <button class="role-dialog-close" type="button" aria-label="Close dialog" data-close-dialog>&times;</button>
+      </div>
+      <form method="post" action="{{ url_for('admin_roles_pages.edit_account', profile_id=profile.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="role-create-grid">
+          <div class="role-field">
+            <label for="edit-name-{{ profile.id }}">Name</label>
+            <input id="edit-name-{{ profile.id }}" name="name" type="text" maxlength="255" value="{{ profile.name }}" autocomplete="name" required>
+          </div>
+          <div class="role-field">
+            <label for="edit-email-{{ profile.id }}">Email</label>
+            <input id="edit-email-{{ profile.id }}" name="email" type="email" maxlength="255" value="{{ profile.primary_email }}" autocomplete="email" required>
+          </div>
+          <div class="role-field">
+            <label for="edit-secondary-email-{{ profile.id }}">Secondary email</label>
+            <input id="edit-secondary-email-{{ profile.id }}" name="secondary_email" type="email" maxlength="255" value="{{ profile.secondary_email or '' }}" autocomplete="off">
+          </div>
+          <div class="role-field">
+            <label for="edit-phone-{{ profile.id }}">Phone / WhatsApp</label>
+            <input id="edit-phone-{{ profile.id }}" name="phone_number" type="tel" maxlength="255" value="{{ profile.phone_number or '' }}" autocomplete="tel">
+          </div>
+          <div class="role-field">
+            <label for="edit-student-id-{{ profile.id }}">University ID</label>
+            <input id="edit-student-id-{{ profile.id }}" name="student_id" type="text" maxlength="255" value="{{ profile.student_id or '' }}" autocomplete="off">
+          </div>
+          <div class="role-field">
+            <label for="edit-department-{{ profile.id }}">Department</label>
+            <select id="edit-department-{{ profile.id }}" name="department" required>
+              {% if profile.department not in department_codes %}
+                <option value="{{ profile.department }}" selected>{{ profile.department }}</option>
+              {% endif %}
+              {% for code, label in departments %}
+                <option value="{{ code }}" {% if profile.department == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <small>For TA roles, the department is determined by the selected role.</small>
+          </div>
+          <div class="role-field">
+            <label for="edit-role-{{ profile.id }}">Role</label>
+            <select id="edit-role-{{ profile.id }}" name="role" required>
+              {% for choice in role_choices %}
+                <option value="{{ choice.value }}" {% if profile.role == choice.value %}selected{% endif %}>{{ choice.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="role-field">
+            <label for="edit-password-{{ profile.id }}">New password</label>
+            <input id="edit-password-{{ profile.id }}" name="password" type="password" autocomplete="new-password">
+            <small>Optional. At least 8 characters and one number or symbol.</small>
+          </div>
+        </div>
+        <div class="role-dialog-actions">
+          <button class="role-dialog-cancel" type="button" data-close-dialog>Cancel</button>
+          <button type="submit">Save changes</button>
+        </div>
+      </form>
+    </dialog>
   {% else %}
     <p class="role-empty">No accounts are available yet.</p>
   {% endfor %}
