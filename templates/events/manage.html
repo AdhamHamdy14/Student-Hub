@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Events - Student Hub{% endblock %}
+{% block body_class %}events-admin{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/events-admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="event-admin-page">
+  <header class="page-head">
+    <div class="titles">
+      <h1>Manage Events</h1>
+      <p>Create and manage workshops, hackathons, and club activities at FOE-AU.</p>
+    </div>
+    <div class="head-actions">
+      <a class="btn btn-primary add-event" href="{{ url_for('event_management_pages.new_event') }}">+ Add event</a>
+    </div>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-list" role="status">
+        {% for category, message in messages %}
+          <p class="flash-msg {{ category }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="filter-row">
+    <div class="pills" role="group" aria-label="Filter by category">
+      <button type="button" class="pill" data-filter="all" aria-pressed="true">All Events</button>
+      {% for category in categories %}
+        <button type="button" class="pill" data-filter="{{ category|lower }}" aria-pressed="false">{{ category }}</button>
+      {% endfor %}
+    </div>
+    <label class="search">
+      <span aria-hidden="true">⌕</span>
+      <input type="search" id="event-search" placeholder="Search events, organizers, or locations..." aria-label="Search events">
+    </label>
+  </div>
+
+  <section class="event-grid" id="event-grid" aria-label="Events to manage">
+    {% for event in events %}
+      <article
+        class="event-card"
+        data-category="{{ event.category|lower }}"
+        data-search="{{ event.event_name }} {{ event.organizer }} {{ event.location }} {{ event.category }}"
+      >
+        <div class="top">
+          <span class="eyebrow">{{ event.organizer }} &middot; {{ event.category }}</span>
+          <span class="badge {% if event.registration_status == 'open' %}badge--open{% else %}badge--closed{% endif %}">
+            {{ event.registration_status|title }}
+          </span>
+        </div>
+        <h2>{{ event.event_name }}</h2>
+        <ul>
+          <li>{{ event.date.strftime('%a, %d %b') }} &middot; {{ event.start_time.strftime('%H:%M') }}–{{ event.end_time.strftime('%H:%M') }}</li>
+          <li>{{ event.location }}</li>
+          <li>{% if event.capacity %}{{ event.capacity }} seats{% else %}No capacity limit{% endif %}</li>
+        </ul>
+        <a class="btn btn-primary" href="{{ url_for('event_management_pages.edit_event', event_id=event.id) }}">Edit event</a>
+      </article>
+    {% else %}
+      <p class="empty-state">No events have been created yet. Add an event to get started.</p>
+    {% endfor %}
+  </section>
+  <p class="no-results" id="no-results" hidden>No events match your search.</p>
+</div>
+
+<script>
+  const cards = [...document.querySelectorAll('.event-card')];
+  const filters = [...document.querySelectorAll('.pill')];
+  const search = document.getElementById('event-search');
+  const noResults = document.getElementById('no-results');
+  let activeFilter = 'all';
+
+  function filterEvents() {
+    const term = search.value.trim().toLowerCase();
+    let visibleCount = 0;
+    cards.forEach((card) => {
+      const matchesCategory = activeFilter === 'all' || card.dataset.category === activeFilter;
+      const matchesSearch = card.dataset.search.toLowerCase().includes(term);
+      card.hidden = !(matchesCategory && matchesSearch);
+      if (!card.hidden) visibleCount += 1;
+    });
+    noResults.hidden = visibleCount > 0;
+  }
+
+  filters.forEach((button) => button.addEventListener('click', () => {
+    filters.forEach((filter) => filter.setAttribute('aria-pressed', String(filter === button)));
+    activeFilter = button.dataset.filter;
+    filterEvents();
+  }));
+  search.addEventListener('input', filterEvents);
+</script>
+{% endblock %}

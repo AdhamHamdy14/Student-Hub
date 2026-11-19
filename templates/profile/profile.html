@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Profile &amp; Account Settings – Student Hub{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/profile.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="profile-page">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="profile-messages" aria-live="polite">
+        {% for category, message in messages %}
+          <p class="profile-message profile-message--{{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <header class="page-head">
+    <a class="back-link" href="{{ url_for('home') }}">← Back to Home</a>
+    <h1>Profile &amp; Account Settings</h1>
+    <p>Manage your personal details, contact emails, profile photo, and password security.</p>
+  </header>
+
+  <div class="profile-layout">
+    <aside class="card identity" aria-label="Profile photo and academic identity">
+      <div class="photo">
+        {% if profile.profile_image_url %}
+          <img
+            class="preview"
+            src="{{ url_for('profile_pages.photo', filename=profile.profile_image_url) }}"
+            alt="Profile photo"
+          >
+        {% else %}
+          <span aria-hidden="true">{{ profile.name[:1]|upper }}</span>
+        {% endif %}
+        <button type="button" class="photo-edit" id="photo-edit" aria-label="Choose a profile photo">
+          <svg aria-hidden="true"><use href="#camera"/></svg>
+        </button>
+      </div>
+      <form class="photo-form" id="photo-form" action="{{ url_for('profile_pages.update_photo') }}" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <input type="file" id="photo-file" name="profile_photo" accept="image/png,image/jpeg" hidden>
+        <div class="photo-actions">
+          <button type="button" class="btn-upload" id="upload">Upload New Photo</button>
+          <button type="submit" class="btn-remove" name="action" value="remove" {% if not profile.profile_image_url %}disabled{% endif %}>Remove</button>
+        </div>
+        <p class="photo-hint">JPG or PNG, max 2MB</p>
+        <p class="photo-error" id="photo-error" role="alert" hidden></p>
+      </form>
+
+      <h2>{{ profile.name }}</h2>
+      <p class="program">{{ profile.department or "Department not set" }}<br>Faculty of Engineering</p>
+      <p class="role-badge"><svg aria-hidden="true"><use href="#user"/></svg>{{ role_label(profile.role) }}</p>
+
+      <hr>
+      <dl class="facts">
+        <dt>Faculty</dt>
+        <dd>Faculty of Engineering,<br>Alexandria University</dd>
+        <dt>Department</dt>
+        <dd>{{ profile.department or "Not set" }}</dd>
+        <dt>University ID</dt>
+        <dd>{{ profile.student_id or "Not set" }}</dd>
+        <dt>WhatsApp</dt>
+        <dd>{{ profile.phone_number or "Not set" }}</dd>
+      </dl>
+    </aside>
+
+    <form class="card panel personal" action="{{ url_for('profile_pages.update') }}" method="post" aria-labelledby="personal-title">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <h2 id="personal-title">Personal Information</h2>
+      <div class="row">
+        <div class="field">
+          <label for="name">Full Name</label>
+          <div class="input"><input id="name" name="name" type="text" value="{{ profile.name }}" autocomplete="name" maxlength="255" required></div>
+        </div>
+        <div class="field">
+          <label for="phone">Phone / WhatsApp Number</label>
+          <div class="input"><input id="phone" name="phone_number" type="tel" value="{{ profile.phone_number or '' }}" autocomplete="tel" maxlength="255"></div>
+          <p class="help">For Lost &amp; Found / Used Items coordination.</p>
+        </div>
+      </div>
+
+      <h3>Email Addresses</h3>
+      <div class="field field--email">
+        <div class="label-line">
+          <label for="primary-email">Primary University Email</label>
+          <span class="status-pill">Primary</span>
+        </div>
+        <div class="input"><input id="primary-email" name="primary_email" type="email" value="{{ profile.primary_email }}" autocomplete="email" readonly></div>
+      </div>
+
+      <div class="backup">
+        <div class="field">
+          <label for="backup-email">Secondary / Backup Email</label>
+          <div class="input"><input id="backup-email" name="secondary_email" type="email" value="{{ profile.secondary_email or '' }}" placeholder="Add a personal backup email" maxlength="255" autocomplete="email"></div>
+        </div>
+        <button type="button" class="btn-outline" id="focus-backup">+ Add Email</button>
+      </div>
+
+      <div class="panel-foot">
+        <button type="submit" class="btn-primary">Save Profile Changes</button>
+      </div>
+    </form>
+
+    <form class="card panel security" action="{{ url_for('profile_pages.update_password') }}" method="post" aria-labelledby="security-title">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <h2 id="security-title">Change Password</h2>
+      <p class="lead">Update your password regularly to keep your Student Hub account secure.</p>
+
+      <div class="field field--current">
+        <label for="current">Current Password</label>
+        <div class="input">
+          <input id="current" name="current_password" type="password" autocomplete="current-password" required>
+          <button type="button" class="toggle" data-target="current" aria-label="Show current password"><svg aria-hidden="true"><use href="#eye"/></svg></button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="new">New Password</label>
+          <div class="input">
+            <input id="new" name="new_password" type="password" autocomplete="new-password" minlength="8" required>
+            <button type="button" class="toggle" data-target="new" aria-label="Show new password"><svg aria-hidden="true"><use href="#eye"/></svg></button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="confirm">Confirm New Password</label>
+          <div class="input">
+            <input id="confirm" name="confirm_password" type="password" autocomplete="new-password" required>
+            <button type="button" class="toggle" data-target="confirm" aria-label="Show confirmation password"><svg aria-hidden="true"><use href="#eye"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="security-foot">
+        <p class="requirement"><svg aria-hidden="true"><use href="#info"/></svg>At least 8 characters and 1 number or symbol.</p>
+        <button type="submit" class="btn-primary btn-primary--lg">Update Password</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='app/js/profile.js') }}" defer></script>
+{% endblock %}

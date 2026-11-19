@@ -2,6 +2,7 @@ from flask import Blueprint, flash, g, redirect, render_template, request, url_f
 from sqlalchemy.exc import IntegrityError
 
 from models import Event, EventReservation, StarredEvent, db
+from services.roles import ADMIN_ROLE, EVENT_MANAGER_ROLE
 
 events_pages = Blueprint("events_pages", __name__)
 
@@ -10,6 +11,8 @@ events_pages = Blueprint("events_pages", __name__)
 def require_login():
     if not getattr(g, "current_user", None):
         return redirect(url_for("auth_pages.login"))
+    if g.current_user.role in {ADMIN_ROLE, EVENT_MANAGER_ROLE}:
+        return redirect(url_for("event_management_pages.index"))
 
 
 @events_pages.route("/events")

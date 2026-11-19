@@ -1,7 +1,121 @@
 {% extends "base.html" %}
 
-{% block title %}Student Hub - Home{% endblock %}
+{% block title %}Labs - Student Hub{% endblock %}
 
 {% block content %}
+<section class="page-header">
+  <h1>Labs</h1>
+  <p>Browse labs and their scheduled slots.</p>
+</section>
 
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="flash-msg {{ category }}" role="alert">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+{% if can_create_lab %}
+  <section class="lab-create">
+    <h2>Create a lab</h2>
+    <form method="post" action="{{ url_for('labs_pages.create_lab') }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <label>Lab name <input name="name" required maxlength="255"></label>
+      <label>Room <input name="room" required maxlength="255"></label>
+      <label>Capacity <input name="capacity" type="number" min="1" required></label>
+      <label>Status
+        <select name="status">
+          <option value="available">Available</option>
+          <option value="maintenance">Maintenance</option>
+          <option value="closed">Closed</option>
+        </select>
+      </label>
+      {% if g.current_user.role == "admin" %}
+        <label>Department
+          <select name="department" required>
+            <option value="">Choose a department</option>
+            {% for department in departments %}
+              <option value="{{ department }}">{{ department }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      {% else %}
+        <input type="hidden" name="department" value="{{ manager_department }}">
+        <p>Department: {{ manager_department }}</p>
+      {% endif %}
+      <button type="submit">Create lab</button>
+    </form>
+  </section>
+{% endif %}
+
+<section class="lab-list" aria-label="Labs">
+  {% for lab in labs %}
+    {% set can_manage = g.current_user.role == "admin" or (manager_department and manager_department == lab.department) %}
+    <article class="lab-card">
+      <h2>{{ lab.name }}</h2>
+      <p>{{ lab.department or "Unassigned" }} · {{ lab.room }} · Capacity {{ lab.capacity }}</p>
+      <p>Status: {{ lab.status|title }}</p>
+
+      {% if can_manage %}
+        <details>
+          <summary>Manage lab</summary>
+          <form method="post" action="{{ url_for('labs_pages.update_lab', lab_id=lab.id) }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <label>Lab name <input name="name" value="{{ lab.name }}" required maxlength="255"></label>
+            <label>Room <input name="room" value="{{ lab.room }}" required maxlength="255"></label>
+            <label>Capacity <input name="capacity" type="number" min="1" value="{{ lab.capacity }}" required></label>
+            <label>Status
+              <select name="status">
+                {% for status in ["available", "maintenance", "closed"] %}
+                  <option value="{{ status }}" {% if lab.status == status %}selected{% endif %}>{{ status|title }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            {% if g.current_user.role == "admin" %}
+              <label>Department
+                <select name="department" required>
+                  {% for department in departments %}
+                    <option value="{{ department }}" {% if lab.department == department %}selected{% endif %}>{{ department }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            {% endif %}
+            <button type="submit">Save lab</button>
+          </form>
+
+          <h3>Slots</h3>
+          {% for slot in lab.slots %}
+            <div class="lab-slot">
+              <span>{{ slot.date }} · {{ slot.start_time }}–{{ slot.end_time }} · capacity {{ slot.capacity }} · {{ "Active" if slot.is_active else "Inactive" }}</span>
+              <form method="post" action="{{ url_for('labs_pages.toggle_slot', lab_id=lab.id, slot_id=slot.id) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button type="submit">{{ "Deactivate" if slot.is_active else "Activate" }}</button>
+              </form>
+            </div>
+          {% else %}
+            <p>No slots have been added.</p>
+          {% endfor %}
+
+          <form method="post" action="{{ url_for('labs_pages.create_slot', lab_id=lab.id) }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <h4>Add a slot</h4>
+            <label>Date <input name="date" type="date" required></label>
+            <label>Start <input name="start_time" type="time" required></label>
+            <label>End <input name="end_time" type="time" required></label>
+            <label>Capacity <input name="capacity" type="number" min="1" max="{{ lab.capacity }}" required></label>
+            <button type="submit">Add slot</button>
+          </form>
+
+          <form method="post" action="{{ url_for('labs_pages.delete_lab', lab_id=lab.id) }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">Delete lab</button>
+          </form>
+        </details>
+      {% endif %}
+    </article>
+  {% else %}
+    <p>No labs are available.</p>
+  {% endfor %}
+</section>
 {% endblock %}

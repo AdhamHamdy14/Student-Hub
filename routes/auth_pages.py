@@ -1,5 +1,5 @@
-import re
 import secrets
+import time
 from datetime import timedelta
 from functools import wraps
 from hmac import compare_digest
@@ -19,31 +19,49 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import PasswordReset, Profile, db, utc_now
+from services.password_reset_email import (
+    PasswordResetEmailError,
+    send_password_reset_email,
+)
+from services.passwords import password_meets_policy
+from services.roles import ROLE_VALUES
 
 auth_pages = Blueprint("auth_pages", __name__)
-SUPPORTED_ROLES = frozenset({"admin", "teaching_assistant", "student"})
+LOGIN_MAX_FAILED_ATTEMPTS = 5
+LOGIN_LOCKOUT_DURATION = timedelta(minutes=15)
+PASSWORD_RESET_LIFETIME = timedelta(minutes=15)
+PASSWORD_RESET_MAX_ATTEMPTS = 5
+
+
+def _issue_password_reset(user):
+    PasswordReset.query.filter_by(profile_id=user.id).delete()
+
+    otp_code = f"{secrets.randbelow(1_000_000):06d}"
+    reset_entry = PasswordReset(
+        profile_id=user.id,
+        code=generate_password_hash(otp_code),
+        reset_session_token=secrets.token_urlsafe(32),
+        expires_at=utc_now() + PASSWORD_RESET_LIFETIME,
+    )
+    db.session.add(reset_entry)
+    db.session.commit()
+
+    try:
+        send_password_reset_email(user.primary_email, otp_code)
+    except PasswordResetEmailError:
+        db.session.delete(reset_entry)
+        db.session.commit()
+        raise
+
+    return reset_entry
 
 
 def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
-        profile_id = session.get("profile_id")
-        auth_token = session.get("auth_token")
-        if not profile_id or not isinstance(auth_token, str):
-            session.clear()
+        if not getattr(g, "current_user", None):
             return redirect(url_for("auth_pages.login"))
 
-        user = db.session.get(Profile, profile_id)
-        if (
-            user is None
-            or not isinstance(user.tokens, str)
-            or not compare_digest(user.tokens, auth_token)
-        ):
-            session.clear()
-            flash("Your session is no longer active. Please log in again.", "error")
-            return redirect(url_for("auth_pages.login"))
-
-        g.current_user = user
         return view(*args, **kwargs)
 
     return wrapped_view
@@ -53,7 +71,7 @@ def roles_required(*allowed_roles):
     def decorator(view):
         @wraps(view)
         def wrapped_view(*args, **kwargs):
-            if g.current_user.role not in allowed_roles:
+            if not getattr(g, "current_user", None) or g.current_user.role not in allowed_roles:
                 abort(403)
             return view(*args, **kwargs)
 
@@ -72,13 +90,38 @@ def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
-        user = Profile.query.filter_by(primary_email=email).first()
+        user = Profile.query.filter_by(primary_email=email).with_for_update().first()
 
-        if not user or not check_password_hash(user.password_hash, password):
+        if not user:
             flash("Invalid email or password.", "error")
             return redirect(url_for("auth_pages.login"))
 
-        if user.role not in SUPPORTED_ROLES:
+        now = utc_now()
+        if user.login_locked_until and now < user.login_locked_until:
+            flash("Too many failed login attempts. Please try again in 15 minutes.", "error")
+            return redirect(url_for("auth_pages.login"))
+
+        if user.login_locked_until:
+            user.login_locked_until = None
+            user.failed_login_attempts = 0
+
+        if not check_password_hash(user.password_hash, password):
+            user.failed_login_attempts += 1
+            if user.failed_login_attempts >= LOGIN_MAX_FAILED_ATTEMPTS:
+                user.login_locked_until = now + LOGIN_LOCKOUT_DURATION
+                flash(
+                    "Too many failed login attempts. Please try again in 15 minutes.",
+                    "error",
+                )
+            else:
+                flash("Invalid email or password.", "error")
+            db.session.commit()
+            return redirect(url_for("auth_pages.login"))
+
+        user.failed_login_attempts = 0
+        user.login_locked_until = None
+        if user.role not in ROLE_VALUES:
+            db.session.commit()
             flash("This account has an unsupported role.", "error")
             return redirect(url_for("auth_pages.login"))
 
@@ -87,8 +130,10 @@ def login():
         db.session.commit()
 
         session.clear()
+        session.permanent = True
         session["profile_id"] = user.id
         session["auth_token"] = auth_token
+        session["auth_last_activity"] = time.time()
         return redirect(url_for("home"))
 
     return render_template("auth/login.html")
@@ -123,21 +168,17 @@ def forgot_password():
             flash("No account found with this email address.", "error")
             return redirect(url_for("auth_pages.forgot_password"))
 
-        PasswordReset.query.filter_by(profile_id=user.id).delete()
-
-        otp_code = f"{secrets.randbelow(1_000_000):06d}"
-        reset_token = secrets.token_urlsafe(32)
-        reset_entry = PasswordReset(
-            profile_id=user.id,
-            code=otp_code,
-            reset_session_token=reset_token,
-            expires_at=utc_now() + timedelta(minutes=10),
-        )
-        db.session.add(reset_entry)
-        db.session.commit()
-
-        if current_app.debug:
-            current_app.logger.debug("Password reset code for %s: %s", email, otp_code)
+        try:
+            _issue_password_reset(user)
+        except PasswordResetEmailError:
+            current_app.logger.exception("Failed to send a password reset email.")
+            session.pop("reset_profile_id", None)
+            session.pop("reset_session_token", None)
+            flash(
+                "Unable to send the verification email. Please try again later.",
+                "error",
+            )
+            return redirect(url_for("auth_pages.forgot_password"))
 
         session["reset_profile_id"] = user.id
         return redirect(url_for("auth_pages.verify_otp"))
@@ -163,21 +204,24 @@ def verify_otp():
             flash("Verification code expired. Please request a new one.", "error")
             return redirect(url_for("auth_pages.forgot_password"))
 
-        if reset_entry.attempts >= 5:
+        if reset_entry.attempts >= PASSWORD_RESET_MAX_ATTEMPTS:
             flash("Too many failed attempts. Please request a new code.", "error")
             return redirect(url_for("auth_pages.forgot_password"))
 
-        if (
-            len(entered_code) != 6
-            or not entered_code.isdecimal()
-            or entered_code != reset_entry.code
-        ):
+        try:
+            code_is_valid = check_password_hash(reset_entry.code, entered_code)
+        except ValueError:
+            code_is_valid = compare_digest(reset_entry.code, entered_code)
+
+        if len(entered_code) != 6 or not entered_code.isdecimal() or not code_is_valid:
             reset_entry.attempts += 1
             db.session.commit()
             flash("Invalid verification code. Try again.", "error")
             return redirect(url_for("auth_pages.verify_otp"))
 
         session["reset_session_token"] = reset_entry.reset_session_token
+        reset_entry.code = generate_password_hash(secrets.token_urlsafe(32))
+        db.session.commit()
         return redirect(url_for("auth_pages.reset_password"))
 
     return render_template("auth/verify_otp.html")
@@ -196,22 +240,21 @@ def resend_otp():
         flash("Account not found. Please start over.", "error")
         return redirect(url_for("auth_pages.forgot_password"))
 
-    PasswordReset.query.filter_by(profile_id=profile_id).delete()
-    otp_code = f"{secrets.randbelow(1_000_000):06d}"
-    reset_entry = PasswordReset(
-        profile_id=profile_id,
-        code=otp_code,
-        reset_session_token=secrets.token_urlsafe(32),
-        expires_at=utc_now() + timedelta(minutes=10),
-    )
-    db.session.add(reset_entry)
-    db.session.commit()
+    try:
+        _issue_password_reset(user)
+    except PasswordResetEmailError:
+        current_app.logger.exception("Failed to resend a password reset email.")
+        session.pop("reset_profile_id", None)
+        session.pop("reset_session_token", None)
+        flash(
+            "Unable to send the verification email. Please try again later.",
+            "error",
+        )
+        return redirect(url_for("auth_pages.forgot_password"))
+
+    session["reset_profile_id"] = user.id
     session.pop("reset_session_token", None)
-
-    if current_app.debug:
-        current_app.logger.debug("Password reset code for %s: %s", user.primary_email, otp_code)
-
-    flash("A new verification code has been generated.", "success")
+    flash("A new verification code has been sent to your email.", "success")
     return redirect(url_for("auth_pages.verify_otp"))
 
 
@@ -235,7 +278,7 @@ def reset_password():
         password = request.form.get("password", "")
         confirm = request.form.get("confirm", "")
 
-        if len(password) < 8 or not re.search(r"[0-9\W_]", password):
+        if not password_meets_policy(password):
             flash("Password must be at least 8 characters with 1 number or symbol.", "error")
             return redirect(url_for("auth_pages.reset_password"))
 

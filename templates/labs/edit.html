@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}{% if lab %}Manage {{ lab.name }}{% else %}Add lab{% endif %} - Student Hub{% endblock %}
+{% block body_class %}labs-admin{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/labs-admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="lab-admin-page">
+  <header class="slots-head">
+    <div>
+      <a class="back-link" href="{{ url_for('labs_pages.labs') }}">Back to labs</a>
+      <h1>{% if lab %}{{ lab.name }}{% else %}Add lab{% endif %}</h1>
+      {% if lab %}<p>{{ lab.department or "Unassigned" }} &middot; {{ lab.room }}</p>{% endif %}
+    </div>
+    {% if lab %}
+      <a class="btn btn-primary" href="#add-slot">+ Add slot</a>
+    {% endif %}
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-list" role="alert">
+        {% for category, message in messages %}
+          <p class="flash-msg {{ category }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="lab-panel lab-details" aria-labelledby="lab-details-title">
+    <h2 id="lab-details-title">Lab details</h2>
+    <form method="post" action="{% if lab %}{{ url_for('labs_pages.update_lab', lab_id=lab.id) }}{% else %}{{ url_for('labs_pages.create_lab') }}{% endif %}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="lab-form-grid">
+        <div class="field">
+          <label for="lab-name">Lab name</label>
+          <input id="lab-name" name="name" maxlength="255" value="{{ request.form.get('name', lab.name if lab else '') }}" required>
+        </div>
+        <div class="field">
+          <label for="lab-room">Room</label>
+          <input id="lab-room" name="room" maxlength="255" value="{{ request.form.get('room', lab.room if lab else '') }}" required>
+        </div>
+        <div class="field">
+          <label for="lab-capacity">Capacity</label>
+          <input id="lab-capacity" name="capacity" type="number" min="1" value="{{ request.form.get('capacity', lab.capacity if lab else '') }}" required>
+        </div>
+        <div class="field">
+          <label for="lab-status">Status</label>
+          {% set lab_status = request.form.get('status', lab.status if lab else 'available') %}
+          <select id="lab-status" name="status">
+            <option value="available" {% if lab_status == 'available' %}selected{% endif %}>Available</option>
+            <option value="maintenance" {% if lab_status == 'maintenance' %}selected{% endif %}>Maintenance</option>
+            <option value="closed" {% if lab_status == 'closed' %}selected{% endif %}>Closed</option>
+          </select>
+        </div>
+        {% if g.current_user.role == admin_role %}
+          <div class="field">
+            <label for="lab-department">Department</label>
+            {% set lab_department = request.form.get('department', lab.department if lab else '') %}
+            <select id="lab-department" name="department" required>
+              <option value="">Choose a department</option>
+              {% for department in departments %}
+                <option value="{{ department }}" {% if lab_department == department %}selected{% endif %}>{{ department }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% else %}
+          <input type="hidden" name="department" value="{{ manager_department }}">
+          <p class="department-note">Department: {{ manager_department }}</p>
+        {% endif %}
+      </div>
+      <div class="form-actions">
+        <a class="btn btn-outline" href="{{ url_for('labs_pages.labs') }}">Cancel</a>
+        <button class="btn btn-primary" type="submit">{% if lab %}Save lab{% else %}Create lab{% endif %}</button>
+      </div>
+    </form>
+  </section>
+
+  {% if lab %}
+    <section class="slots-layout" id="slots" aria-label="Manage lab slots">
+      <div class="slots-card">
+        <h2>Scheduled slots</h2>
+        <p class="sub">{{ slots|length }} slot{% if slots|length != 1 %}s{% endif %} &middot; {{ lab.name }}</p>
+        {% if slots %}
+          <div class="slot-cols" aria-hidden="true">
+            <span>Date and time</span><span>Status</span><span>Action</span>
+          </div>
+          <ul class="slot-list">
+            {% for slot in slots %}
+              {% set reservation_count = slot.reservations|rejectattr('status', 'equalto', 'cancelled')|list|length %}
+              <li class="slot-row">
+                <span class="time">{{ slot.date.strftime('%a, %d %b') }} &middot; {{ slot.start_time.strftime('%H:%M') }}–{{ slot.end_time.strftime('%H:%M') }}</span>
+                {% if reservation_count %}
+                  <span class="pill-status pill-status--booked">Booked</span>
+                {% elif slot.is_active %}
+                  <span class="pill-status pill-status--available">Available</span>
+                {% else %}
+                  <span class="pill-status pill-status--unavailable">Unavailable</span>
+                {% endif %}
+                <span class="action">
+                  {% if not reservation_count %}
+                    <a class="btn" href="{{ url_for('labs_pages.edit_lab', lab_id=lab.id, slot_id=slot.id) }}">Edit</a>
+                  {% else %}
+                    <span>Reserved</span>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('labs_pages.toggle_slot', lab_id=lab.id, slot_id=slot.id) }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn" type="submit">{{ "Deactivate" if slot.is_active else "Activate" }}</button>
+                  </form>
+                </span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="empty-state">No slots have been added yet.</p>
+        {% endif %}
+      </div>
+
+      <section class="edit-slot" id="add-slot" aria-labelledby="slot-form-title">
+        {% if selected_slot %}
+          <h2 id="slot-form-title">Edit slot</h2>
+          <p class="sub">{{ selected_slot.date.strftime('%a, %d %b %Y') }} &middot; {{ lab.name }}</p>
+          {% if selected_slot_reservations %}
+            <p class="note">This slot has active reservations and cannot be edited.</p>
+          {% else %}
+            <form method="post" action="{{ url_for('labs_pages.update_slot', lab_id=lab.id, slot_id=selected_slot.id) }}">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+              <div class="row">
+                <div class="field">
+                  <label for="slot-date">Date</label>
+                  <input id="slot-date" name="date" type="date" value="{{ request.form.get('date', selected_slot.date.isoformat()) }}" required>
+                </div>
+                <div class="field">
+                  <label for="slot-capacity">Capacity</label>
+                  <input id="slot-capacity" name="capacity" type="number" min="1" max="{{ lab.capacity }}" value="{{ request.form.get('capacity', selected_slot.capacity) }}" required>
+                </div>
+              </div>
+              <div class="row">
+                <div class="field">
+                  <label for="slot-start">Start time</label>
+                  <input id="slot-start" name="start_time" type="time" value="{{ request.form.get('start_time', selected_slot.start_time.strftime('%H:%M')) }}" required>
+                </div>
+                <div class="field">
+                  <label for="slot-end">End time</label>
+                  <input id="slot-end" name="end_time" type="time" value="{{ request.form.get('end_time', selected_slot.end_time.strftime('%H:%M')) }}" required>
+                </div>
+              </div>
+              {% set availability = request.form.get('availability', 'available' if selected_slot.is_active else 'unavailable') %}
+              <div class="field availability">
+                <label for="slot-availability">Availability</label>
+                <select id="slot-availability" name="availability">
+                  <option value="available" {% if availability == 'available' %}selected{% endif %}>Available</option>
+                  <option value="unavailable" {% if availability == 'unavailable' %}selected{% endif %}>Unavailable</option>
+                </select>
+              </div>
+              <p class="note">Existing reservations are preserved.</p>
+              <div class="actions">
+                <a class="btn btn-outline" href="{{ url_for('labs_pages.edit_lab', lab_id=lab.id) }}">Cancel</a>
+                <button class="btn btn-primary" type="submit">Save changes</button>
+              </div>
+            </form>
+          {% endif %}
+        {% else %}
+          <h2 id="slot-form-title">Add slot</h2>
+          <p class="sub">{{ lab.name }}</p>
+          <form method="post" action="{{ url_for('labs_pages.create_slot', lab_id=lab.id) }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <div class="field">
+              <label for="new-slot-date">Date</label>
+              <input id="new-slot-date" name="date" type="date" required>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="new-slot-start">Start time</label>
+                <input id="new-slot-start" name="start_time" type="time" required>
+              </div>
+              <div class="field">
+                <label for="new-slot-end">End time</label>
+                <input id="new-slot-end" name="end_time" type="time" required>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="new-slot-capacity">Capacity</label>
+                <input id="new-slot-capacity" name="capacity" type="number" min="1" max="{{ lab.capacity }}" required>
+              </div>
+              <div class="field">
+                <label for="new-slot-availability">Availability</label>
+                <select id="new-slot-availability" name="availability">
+                  <option value="available">Available</option>
+                  <option value="unavailable">Unavailable</option>
+                </select>
+              </div>
+            </div>
+            <div class="actions">
+              <a class="btn btn-outline" href="{{ url_for('labs_pages.labs') }}">Cancel</a>
+              <button class="btn btn-primary" type="submit">Add slot</button>
+            </div>
+          </form>
+        {% endif %}
+      </section>
+    </section>
+
+    <form class="delete-lab-form" method="post" action="{{ url_for('labs_pages.delete_lab', lab_id=lab.id) }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline" type="submit">Delete lab</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}
