@@ -17,6 +17,7 @@ from routes.labs_pages import labs_pages
 from routes.profile_pages import profile_pages
 from services.csrf import csrf_token
 from services.roles import ADMIN_ROLE, EVENT_MANAGER_ROLE, role_label
+from routes.home_pages import home_pages
 
 load_dotenv()
 
@@ -46,7 +47,7 @@ app.register_blueprint(labs_pages)
 app.register_blueprint(profile_pages)
 app.register_blueprint(admin_roles_pages)
 app.register_blueprint(event_management_pages)
-
+app.register_blueprint(home_pages)
 
 @app.context_processor
 def inject_template_helpers():
@@ -111,11 +112,7 @@ def index():
     return redirect(url_for("auth_pages.login"))
 
 
-@app.route("/home")
-def home():
-    if not getattr(g, "current_user", None):
-        return redirect(url_for("auth_pages.login"))
-    return render_template("home.html")
+app.add_url_rule("/home", endpoint="home", view_func=app.view_functions["home_pages.home"])
 
 
 @app.route("/health")
