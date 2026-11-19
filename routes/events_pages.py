@@ -2,6 +2,7 @@ from flask import Blueprint, flash, g, redirect, render_template, request, url_f
 from sqlalchemy.exc import IntegrityError
 
 from models import Event, EventReservation, StarredEvent, db
+from services.csrf import csrf_protect
 from services.roles import ADMIN_ROLE, EVENT_MANAGER_ROLE
 
 events_pages = Blueprint("events_pages", __name__)
@@ -135,6 +136,7 @@ def cancel_registration(event_id):
 
 
 @events_pages.route("/events/<int:event_id>/star", methods=["POST"])
+@csrf_protect
 def toggle_star_event(event_id):
     Event.query.get_or_404(event_id)
     existing = StarredEvent.query.filter_by(

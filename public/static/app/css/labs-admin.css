@@ -14,6 +14,8 @@ body.labs-admin .page {
 
 .lab-admin-page {
   width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
   padding: 22px 24px 48px;
   color: var(--lab-ink);
 }
@@ -44,6 +46,13 @@ body.labs-admin .page {
 
 .lab-admin-page .page-head .titles {
   padding-top: 26px;
+}
+
+.lab-admin-page .head-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
 .lab-admin-page h1 {
@@ -188,7 +197,7 @@ body.labs-admin .page {
 
 .lab-admin-page .lab-card {
   min-height: 190px;
-  padding: 18px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   background: #fff;
@@ -671,6 +680,7 @@ body.labs-admin .page {
     padding-top: 0;
   }
 
+  .lab-admin-page .head-actions,
   .lab-admin-page .add-btn,
   .lab-admin-page .slots-head > .btn {
     width: 100%;

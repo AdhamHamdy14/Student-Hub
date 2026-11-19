@@ -1,121 +1,94 @@
 {% extends "base.html" %}
 
 {% block title %}Labs - Student Hub{% endblock %}
+{% block body_class %}labs-admin{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/labs-admin.css') }}">
+{% endblock %}
 
 {% block content %}
-<section class="page-header">
-  <h1>Labs</h1>
-  <p>Browse labs and their scheduled slots.</p>
-</section>
+<div class="lab-admin-page">
+  <header class="page-head">
+    <div class="titles">
+      <h1>Labs</h1>
+      <p>Browse labs and their scheduled slots.</p>
+    </div>
+  </header>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for category, message in messages %}
-      <div class="flash-msg {{ category }}" role="alert">{{ message }}</div>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-list" role="status">
+        {% for category, message in messages %}
+          <p class="flash-msg {{ category }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="lab-filters">
+    <div class="lab-pills" role="group" aria-label="Filter labs by status">
+      <button type="button" class="lab-pill" data-filter="all" aria-pressed="true">All labs</button>
+      <button type="button" class="lab-pill" data-filter="available" aria-pressed="false">Available</button>
+      <button type="button" class="lab-pill" data-filter="maintenance" aria-pressed="false">Maintenance</button>
+      <button type="button" class="lab-pill" data-filter="closed" aria-pressed="false">Closed</button>
+    </div>
+    <label class="lab-search">
+      <span aria-hidden="true">⌕</span>
+      <input id="lab-search" type="search" placeholder="Search labs..." aria-label="Search labs">
+    </label>
+  </div>
+
+  <section class="lab-grid" id="lab-grid" aria-label="Labs">
+    {% for lab in labs %}
+      {% set active_slots = lab.slots|selectattr('is_active')|list|length %}
+      <article
+        class="lab-card"
+        data-status="{{ lab.status|lower }}"
+        data-search="{{ lab.name }} {{ lab.department or '' }} {{ lab.room }}"
+      >
+        <header>
+          <h2>{{ lab.name }}</h2>
+          <span class="status
+            {% if lab.status == 'available' %}status--open
+            {% elif lab.status == 'maintenance' %}status--few
+            {% else %}status--full{% endif %}"
+          >{{ lab.status|title }}</span>
+        </header>
+        <p>{{ lab.department or "Unassigned" }} &middot; {{ lab.room }}</p>
+        <p>Capacity {{ lab.capacity }} &middot; {{ active_slots }} scheduled slots</p>
+      </article>
+    {% else %}
+      <p class="empty-state">No labs are available.</p>
     {% endfor %}
-  {% endif %}
-{% endwith %}
-
-{% if can_create_lab %}
-  <section class="lab-create">
-    <h2>Create a lab</h2>
-    <form method="post" action="{{ url_for('labs_pages.create_lab') }}">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <label>Lab name <input name="name" required maxlength="255"></label>
-      <label>Room <input name="room" required maxlength="255"></label>
-      <label>Capacity <input name="capacity" type="number" min="1" required></label>
-      <label>Status
-        <select name="status">
-          <option value="available">Available</option>
-          <option value="maintenance">Maintenance</option>
-          <option value="closed">Closed</option>
-        </select>
-      </label>
-      {% if g.current_user.role == "admin" %}
-        <label>Department
-          <select name="department" required>
-            <option value="">Choose a department</option>
-            {% for department in departments %}
-              <option value="{{ department }}">{{ department }}</option>
-            {% endfor %}
-          </select>
-        </label>
-      {% else %}
-        <input type="hidden" name="department" value="{{ manager_department }}">
-        <p>Department: {{ manager_department }}</p>
-      {% endif %}
-      <button type="submit">Create lab</button>
-    </form>
   </section>
-{% endif %}
+  <p class="no-results" id="no-labs" hidden>No labs match your search.</p>
+</div>
 
-<section class="lab-list" aria-label="Labs">
-  {% for lab in labs %}
-    {% set can_manage = g.current_user.role == "admin" or (manager_department and manager_department == lab.department) %}
-    <article class="lab-card">
-      <h2>{{ lab.name }}</h2>
-      <p>{{ lab.department or "Unassigned" }} · {{ lab.room }} · Capacity {{ lab.capacity }}</p>
-      <p>Status: {{ lab.status|title }}</p>
+<script>
+  const labCards = [...document.querySelectorAll('.lab-card')];
+  const labFilters = [...document.querySelectorAll('.lab-pill')];
+  const labSearch = document.getElementById('lab-search');
+  const noLabs = document.getElementById('no-labs');
+  let activeLabFilter = 'all';
 
-      {% if can_manage %}
-        <details>
-          <summary>Manage lab</summary>
-          <form method="post" action="{{ url_for('labs_pages.update_lab', lab_id=lab.id) }}">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <label>Lab name <input name="name" value="{{ lab.name }}" required maxlength="255"></label>
-            <label>Room <input name="room" value="{{ lab.room }}" required maxlength="255"></label>
-            <label>Capacity <input name="capacity" type="number" min="1" value="{{ lab.capacity }}" required></label>
-            <label>Status
-              <select name="status">
-                {% for status in ["available", "maintenance", "closed"] %}
-                  <option value="{{ status }}" {% if lab.status == status %}selected{% endif %}>{{ status|title }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            {% if g.current_user.role == "admin" %}
-              <label>Department
-                <select name="department" required>
-                  {% for department in departments %}
-                    <option value="{{ department }}" {% if lab.department == department %}selected{% endif %}>{{ department }}</option>
-                  {% endfor %}
-                </select>
-              </label>
-            {% endif %}
-            <button type="submit">Save lab</button>
-          </form>
+  function filterLabs() {
+    const term = labSearch.value.trim().toLowerCase();
+    let visibleCount = 0;
+    labCards.forEach((card) => {
+      const matchesStatus = activeLabFilter === 'all' || card.dataset.status === activeLabFilter;
+      const matchesSearch = card.dataset.search.toLowerCase().includes(term);
+      card.hidden = !(matchesStatus && matchesSearch);
+      if (!card.hidden) visibleCount += 1;
+    });
+    noLabs.hidden = visibleCount > 0 || labCards.length === 0;
+  }
 
-          <h3>Slots</h3>
-          {% for slot in lab.slots %}
-            <div class="lab-slot">
-              <span>{{ slot.date }} · {{ slot.start_time }}–{{ slot.end_time }} · capacity {{ slot.capacity }} · {{ "Active" if slot.is_active else "Inactive" }}</span>
-              <form method="post" action="{{ url_for('labs_pages.toggle_slot', lab_id=lab.id, slot_id=slot.id) }}">
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                <button type="submit">{{ "Deactivate" if slot.is_active else "Activate" }}</button>
-              </form>
-            </div>
-          {% else %}
-            <p>No slots have been added.</p>
-          {% endfor %}
-
-          <form method="post" action="{{ url_for('labs_pages.create_slot', lab_id=lab.id) }}">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <h4>Add a slot</h4>
-            <label>Date <input name="date" type="date" required></label>
-            <label>Start <input name="start_time" type="time" required></label>
-            <label>End <input name="end_time" type="time" required></label>
-            <label>Capacity <input name="capacity" type="number" min="1" max="{{ lab.capacity }}" required></label>
-            <button type="submit">Add slot</button>
-          </form>
-
-          <form method="post" action="{{ url_for('labs_pages.delete_lab', lab_id=lab.id) }}">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <button type="submit">Delete lab</button>
-          </form>
-        </details>
-      {% endif %}
-    </article>
-  {% else %}
-    <p>No labs are available.</p>
-  {% endfor %}
-</section>
+  labFilters.forEach((button) => button.addEventListener('click', () => {
+    labFilters.forEach((filter) => filter.setAttribute('aria-pressed', String(filter === button)));
+    activeLabFilter = button.dataset.filter;
+    filterLabs();
+  }));
+  labSearch.addEventListener('input', filterLabs);
+</script>
 {% endblock %}

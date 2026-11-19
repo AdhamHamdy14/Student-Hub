@@ -1,7 +1,7 @@
 import os
 import time
 import unittest
-from datetime import timedelta
+from datetime import date, time as time_of_day, timedelta
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,7 +13,16 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ["DATABASE_URL"] = "sqlite://"
 
 from app import app
-from models import Event, Lab, LabSlot, PasswordReset, Profile, db, utc_now
+from models import (
+    Event,
+    Lab,
+    LabSlot,
+    PasswordReset,
+    Profile,
+    StarredEvent,
+    db,
+    utc_now,
+)
 from services.password_reset_email import (
     GMAIL_SMTP_PORT,
     GMAIL_SMTP_SERVER,
@@ -118,6 +127,7 @@ class AuthenticationSessionTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn(b'class="mobile-menu-toggle"', page.data)
         self.assertIn(b'id="primary-navigation"', page.data)
+        self.assertIn(b'href="/home" class="nav-link active">Home</a>', page.data)
         self.assertIn(b"Profile", page.data)
         self.assertIn(b'href="/profile/"', page.data)
         self.assertIn(b'class="user-account-link" href="/profile/"', page.data)
@@ -671,6 +681,91 @@ class AuthenticationSessionTests(unittest.TestCase):
                 primary_email="assigned-department@example.com"
             ).one()
             self.assertEqual(created_profile.department, "MIE")
+
+    def test_student_lab_page_uses_browse_layout_without_management_actions(self):
+        with app.app_context():
+            db.session.add(
+                Lab(
+                    id=1,
+                    name="CSE Lab",
+                    department="CSE",
+                    capacity=20,
+                    room="101",
+                )
+            )
+            db.session.commit()
+
+        client = app.test_client()
+        self.login(client)
+        labs_page = client.get("/labs")
+
+        self.assertEqual(labs_page.status_code, 200)
+        self.assertIn(b"lab-filters", labs_page.data)
+        self.assertIn(b"lab-grid", labs_page.data)
+        self.assertIn(b"CSE Lab", labs_page.data)
+        self.assertIn(b"labs-admin.css", labs_page.data)
+        self.assertNotIn(b"Manage lab", labs_page.data)
+        self.assertNotIn(b"+ Add lab", labs_page.data)
+
+    def test_student_events_page_places_search_with_filters(self):
+        client = app.test_client()
+        self.login(client)
+        events_page = client.get("/events")
+
+        self.assertEqual(events_page.status_code, 200)
+        self.assertIn(b'class="events-student"', events_page.data)
+        self.assertIn(b'class="events-container"', events_page.data)
+        self.assertLess(
+            events_page.data.index(b'class="events-filters"'),
+            events_page.data.index(b'id="eventSearchInput"'),
+        )
+
+    def test_student_can_star_and_unstar_event_from_events_list(self):
+        with app.app_context():
+            db.session.add(
+                Event(
+                    id=1,
+                    event_name="Systems Workshop",
+                    organizer="Engineering Society",
+                    location="Room 12",
+                    date=date.today() + timedelta(days=1),
+                    start_time=time_of_day(10),
+                    end_time=time_of_day(12),
+                    capacity=25,
+                    category="Workshop",
+                )
+            )
+            db.session.commit()
+
+        client = app.test_client()
+        self.login(client)
+        events_page = client.get("/events")
+        self.assertIn(b"Add Systems Workshop to starred events", events_page.data)
+        with client.session_transaction() as auth_session:
+            csrf = auth_session["_csrf_token"]
+
+        self.assertEqual(client.post("/events/1/star").status_code, 400)
+        response = client.post(
+            "/events/1/star",
+            data={"_csrf_token": csrf},
+        )
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            self.assertIsNotNone(
+                StarredEvent.query.filter_by(profile_id=1, event_id=1).first()
+            )
+
+        starred_page = client.get("/events")
+        self.assertIn(b"aria-pressed=\"true\"", starred_page.data)
+        response = client.post(
+            "/events/1/star",
+            data={"_csrf_token": csrf},
+        )
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            self.assertIsNone(
+                StarredEvent.query.filter_by(profile_id=1, event_id=1).first()
+            )
 
     def test_ta_can_manage_only_matching_department_labs(self):
         with app.app_context():

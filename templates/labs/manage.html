@@ -14,7 +14,9 @@
       <h1>Manage Labs</h1>
       <p>Add labs and manage their details and available slots.</p>
     </div>
-    <a class="btn btn-primary add-btn" href="{{ url_for('labs_pages.new_lab') }}">+ Add lab</a>
+    <div class="head-actions">
+      <a class="btn btn-primary add-btn" href="{{ url_for('labs_pages.new_lab') }}">+ Add lab</a>
+    </div>
   </header>
 
   {% with messages = get_flashed_messages(with_categories=true) %}

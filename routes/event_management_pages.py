@@ -1,6 +1,15 @@
 from datetime import date, time
 
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+from flask import (
+    Blueprint,
+    abort,
+    flash,
+    g,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 
 from models import Event, db
 from services.csrf import csrf_protect

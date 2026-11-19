@@ -40,7 +40,7 @@
     </button>
     <div class="primary-navigation" id="primary-navigation">
       <nav class="nav-links" aria-label="Primary navigation">
-        <a href="{{ url_for('home') }}" class="nav-link{% if request.endpoint == 'home' %} active{% endif %}">Home</a>
+        <a href="{{ url_for('home') }}" class="nav-link{% if request.endpoint in ['home', 'home_pages.home'] %} active{% endif %}">Home</a>
         <a href="{{ url_for('labs_pages.labs') }}" class="nav-link{% if request.endpoint.startswith('labs_pages.') %} active{% endif %}">Labs</a>
         {% if g.current_user.role in [admin_role, event_manager_role] %}
           <a href="{{ url_for('event_management_pages.index') }}" class="nav-link{% if request.endpoint.startswith('event_management_pages.') %} active{% endif %}">Events</a>
