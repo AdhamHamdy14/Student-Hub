@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}{% if event %}Edit event{% else %}Add event{% endif %} - Student Hub{% endblock %}
+{% block body_class %}events-admin{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/events-admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="event-admin-page">
+  <header class="edit-head">
+    <a class="back-link" href="{{ url_for('event_management_pages.index') }}">Back to events</a>
+    <h1>{% if event %}Edit event{% else %}Add event{% endif %}</h1>
+    <p>Update event details, schedule, and registration settings.</p>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-list" role="alert">
+        {% for category, message in messages %}
+          <p class="flash-msg {{ category }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form
+    class="edit-layout"
+    method="post"
+    action="{% if event %}{{ url_for('event_management_pages.update_event', event_id=event.id) }}{% else %}{{ url_for('event_management_pages.create_event') }}{% endif %}"
+  >
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <section class="panel" aria-labelledby="details-title">
+      <h2 id="details-title">Event details</h2>
+      <div class="fields">
+        <div class="field">
+          <label for="event_name">Event title</label>
+          <input id="event_name" name="event_name" type="text" maxlength="255" value="{{ request.form.get('event_name', event.event_name if event else '') }}" required>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="organizer">Organizer</label>
+            <input id="organizer" name="organizer" type="text" maxlength="255" value="{{ request.form.get('organizer', event.organizer if event else '') }}" required>
+          </div>
+          <div class="field">
+            <label for="category">Category</label>
+            <input id="category" name="category" type="text" maxlength="255" list="event-categories" value="{{ request.form.get('category', event.category if event else '') }}" required>
+            <datalist id="event-categories">
+              <option value="Hands-on Workshop">
+              <option value="Hackathon">
+              <option value="Contest">
+              <option value="Tech Talk">
+              <option value="Seminar">
+              <option value="Demo Day">
+            </datalist>
+          </div>
+        </div>
+        <div class="field">
+          <label for="location">Location</label>
+          <input id="location" name="location" type="text" maxlength="255" value="{{ request.form.get('location', event.location if event else '') }}" required>
+        </div>
+        <div class="field">
+          <label for="agenda">About this event / session agenda</label>
+          <textarea id="agenda" name="agenda">{{ request.form.get('agenda', event.agenda if event else '') }}</textarea>
+        </div>
+        <p class="note">Changes will appear on the student event page after saving.</p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="schedule-title">
+      <h2 id="schedule-title">Schedule &amp; registration</h2>
+      <div class="fields">
+        <div class="field">
+          <label for="date">Event date</label>
+          <input id="date" name="date" type="date" value="{{ request.form.get('date', event.date.isoformat() if event else '') }}" required>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="start_time">Start time</label>
+            <input id="start_time" name="start_time" type="time" value="{{ request.form.get('start_time', event.start_time.strftime('%H:%M') if event else '') }}" required>
+          </div>
+          <div class="field">
+            <label for="end_time">End time</label>
+            <input id="end_time" name="end_time" type="time" value="{{ request.form.get('end_time', event.end_time.strftime('%H:%M') if event else '') }}" required>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="capacity">Total capacity</label>
+            <input id="capacity" name="capacity" type="number" min="1" value="{{ request.form.get('capacity', event.capacity if event and event.capacity is not none else '') }}">
+          </div>
+          <div class="field">
+            <label for="registration_status">Registration status</label>
+            {% set status = request.form.get('registration_status', event.registration_status if event else 'open') %}
+            <select id="registration_status" name="registration_status">
+              <option value="open" {% if status == 'open' %}selected{% endif %}>Open</option>
+              <option value="closed" {% if status == 'closed' %}selected{% endif %}>Closed</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <a class="btn btn-outline" href="{{ url_for('event_management_pages.index') }}">Cancel</a>
+        <button class="btn btn-primary" type="submit">{% if event %}Save changes{% else %}Create event{% endif %}</button>
+      </div>
+      {% if event %}
+        <p class="note note-end">Existing registrations will be kept.</p>
+      {% endif %}
+    </section>
+  </form>
+</div>
+{% endblock %}

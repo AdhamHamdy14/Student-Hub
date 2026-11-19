@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Lab changes saved - Student Hub{% endblock %}
+{% block body_class %}labs-admin{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/labs-admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="lab-admin-page">
+  <section class="lab-success" aria-labelledby="saved-title">
+    <div class="msg" role="status">
+      <div class="check" aria-hidden="true">✓</div>
+      <div>
+        <h1 id="saved-title">Changes saved</h1>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <p class="flash-msg {{ category }}">{{ message }}</p>
+            {% endfor %}
+          {% else %}
+            <p>The lab changes have been saved.</p>
+          {% endif %}
+        {% endwith %}
+      </div>
+    </div>
+
+    <dl class="details">
+      <div><dt>Lab</dt><dd>{{ lab.name }}</dd></div>
+      <div><dt>Department</dt><dd>{{ lab.department or "Unassigned" }}</dd></div>
+      <div><dt>Room</dt><dd>{{ lab.room }}</dd></div>
+      <div><dt>Capacity</dt><dd>{{ lab.capacity }}</dd></div>
+      {% if slot %}
+        <div><dt>Date</dt><dd>{{ slot.date.strftime('%a, %d %b %Y') }}</dd></div>
+        <div><dt>Time</dt><dd>{{ slot.start_time.strftime('%H:%M') }}–{{ slot.end_time.strftime('%H:%M') }}</dd></div>
+        <div>
+          <dt>Status</dt>
+          <dd>{% if slot_reservations %}Booked{% elif slot.is_active %}Available{% else %}Unavailable{% endif %}</dd>
+        </div>
+      {% else %}
+        <div><dt>Status</dt><dd>{{ lab.status|title }}</dd></div>
+      {% endif %}
+    </dl>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="{{ url_for('labs_pages.edit_lab', lab_id=lab.id) }}">Manage slots</a>
+      <a class="btn btn-outline" href="{{ url_for('labs_pages.labs') }}">Back to labs</a>
+    </div>
+  </section>
+</div>
+{% endblock %}

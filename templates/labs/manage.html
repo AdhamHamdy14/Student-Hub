@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Labs - Student Hub{% endblock %}
+{% block body_class %}labs-admin{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/labs-admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="lab-admin-page">
+  <header class="page-head">
+    <div class="titles">
+      <h1>Manage Labs</h1>
+      <p>Add labs and manage their details and available slots.</p>
+    </div>
+    <a class="btn btn-primary add-btn" href="{{ url_for('labs_pages.new_lab') }}">+ Add lab</a>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-list" role="status">
+        {% for category, message in messages %}
+          <p class="flash-msg {{ category }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="lab-filters">
+    <div class="lab-pills" role="group" aria-label="Filter labs by status">
+      <button type="button" class="lab-pill" data-filter="all" aria-pressed="true">All labs</button>
+      <button type="button" class="lab-pill" data-filter="available" aria-pressed="false">Available</button>
+      <button type="button" class="lab-pill" data-filter="maintenance" aria-pressed="false">Maintenance</button>
+      <button type="button" class="lab-pill" data-filter="closed" aria-pressed="false">Closed</button>
+    </div>
+    <label class="lab-search">
+      <span aria-hidden="true">⌕</span>
+      <input id="lab-search" type="search" placeholder="Search labs..." aria-label="Search labs">
+    </label>
+  </div>
+
+  <section class="lab-grid" id="lab-grid" aria-label="Labs to manage">
+    {% for lab in labs %}
+      {% set can_manage = g.current_user.role == admin_role or manager_department == lab.department %}
+      <article
+        class="lab-card"
+        data-status="{{ lab.status }}"
+        data-search="{{ lab.name }} {{ lab.department or '' }} {{ lab.room }}"
+      >
+        <header>
+          <h2>{{ lab.name }}</h2>
+          <span class="status
+            {% if lab.status == 'available' %}status--open
+            {% elif lab.status == 'maintenance' %}status--few
+            {% else %}status--full{% endif %}"
+          >{{ lab.status|title }}</span>
+        </header>
+        <p>{{ lab.department or "Unassigned" }} &middot; {{ lab.room }}</p>
+        <p>Capacity {{ lab.capacity }} &middot; {{ lab.slots|length }} scheduled slots</p>
+        {% if can_manage %}
+          <a class="btn btn-primary" href="{{ url_for('labs_pages.edit_lab', lab_id=lab.id) }}">Manage lab</a>
+        {% else %}
+          <span class="read-only">Managed by {{ lab.department or "unassigned department" }}</span>
+        {% endif %}
+      </article>
+    {% else %}
+      <p class="empty-state">No labs have been added yet.</p>
+    {% endfor %}
+  </section>
+  <p class="no-results" id="no-labs" hidden>No labs match your search.</p>
+</div>
+
+<script>
+  const labCards = [...document.querySelectorAll('.lab-card')];
+  const labFilters = [...document.querySelectorAll('.lab-pill')];
+  const labSearch = document.getElementById('lab-search');
+  const noLabs = document.getElementById('no-labs');
+  let activeLabFilter = 'all';
+
+  function filterLabs() {
+    const term = labSearch.value.trim().toLowerCase();
+    let visibleCount = 0;
+    labCards.forEach((card) => {
+      const matchesStatus = activeLabFilter === 'all' || card.dataset.status === activeLabFilter;
+      const matchesSearch = card.dataset.search.toLowerCase().includes(term);
+      card.hidden = !(matchesStatus && matchesSearch);
+      if (!card.hidden) visibleCount += 1;
+    });
+    noLabs.hidden = visibleCount > 0;
+  }
+
+  labFilters.forEach((button) => button.addEventListener('click', () => {
+    labFilters.forEach((filter) => filter.setAttribute('aria-pressed', String(filter === button)));
+    activeLabFilter = button.dataset.filter;
+    filterLabs();
+  }));
+  labSearch.addEventListener('input', filterLabs);
+</script>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Event saved - Student Hub{% endblock %}
+{% block body_class %}events-admin{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/events-admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="event-admin-page">
+  <div class="success-wrap">
+    <section class="success-card" aria-labelledby="saved-title">
+      <div class="success-icon" aria-hidden="true">✓</div>
+      <div class="msg" role="status">
+        <h1 id="saved-title">Event saved</h1>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <p class="flash-msg {{ category }}">{{ message }}</p>
+            {% endfor %}
+          {% else %}
+            <p>Your changes are saved.</p>
+          {% endif %}
+        {% endwith %}
+      </div>
+      <dl class="summary">
+        <div><dt>Event</dt><dd>{{ event.event_name }}</dd></div>
+        <div><dt>Organizer</dt><dd>{{ event.organizer }}</dd></div>
+        <div><dt>Date</dt><dd>{{ event.date.strftime('%a, %d %b %Y') }}</dd></div>
+        <div><dt>Time</dt><dd>{{ event.start_time.strftime('%H:%M') }}–{{ event.end_time.strftime('%H:%M') }}</dd></div>
+        <div><dt>Location</dt><dd>{{ event.location }}</dd></div>
+        <div><dt>Capacity</dt><dd>{% if event.capacity %}{{ event.capacity }} seats{% else %}No limit{% endif %}</dd></div>
+      </dl>
+      <div class="success-actions">
+        <a class="btn btn-primary" href="{{ url_for('event_management_pages.index') }}">Back to events</a>
+        <a class="btn btn-outline" href="{{ url_for('event_management_pages.edit_event', event_id=event.id) }}">Continue editing</a>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

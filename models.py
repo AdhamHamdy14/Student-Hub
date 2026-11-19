@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Index, UniqueConstraint, text
 
 db = SQLAlchemy()
+BIGINT_ID = db.BigInteger().with_variant(db.Integer, "sqlite")
 
 
 def utc_now():
@@ -13,7 +14,7 @@ def utc_now():
 class Profile(db.Model):
     __tablename__ = "profile"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     primary_email = db.Column(db.String(255), unique=True, nullable=False)
     secondary_email = db.Column(db.String(255), unique=True, nullable=True)
@@ -25,6 +26,13 @@ class Profile(db.Model):
         server_default=text("'student'"),
     )
     tokens = db.Column(db.String(255), nullable=True)
+    failed_login_attempts = db.Column(
+        db.Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    login_locked_until = db.Column(db.DateTime, nullable=True)
     last_active = db.Column(
         db.DateTime,
         nullable=False,
@@ -53,8 +61,9 @@ class Profile(db.Model):
 class Lab(db.Model):
     __tablename__ = "lab"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
+    department = db.Column(db.String(20), nullable=True)
     capacity = db.Column(db.BigInteger, nullable=False)
     status = db.Column(
         db.String(255),
@@ -74,7 +83,7 @@ class Lab(db.Model):
 class LabSlot(db.Model):
     __tablename__ = "lab_slots"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     lab_id = db.Column(db.BigInteger, db.ForeignKey("lab.id"), nullable=False)
     date = db.Column(db.Date, nullable=False)
     start_time = db.Column(db.Time, nullable=False)
@@ -98,7 +107,7 @@ class LabSlot(db.Model):
 class LabReservation(db.Model):
     __tablename__ = "lab_reservation"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     profile_id = db.Column(db.BigInteger, db.ForeignKey("profile.id"), nullable=False)
     slot_id = db.Column(db.BigInteger, db.ForeignKey("lab_slots.id"), nullable=False)
     status = db.Column(
@@ -135,7 +144,7 @@ class LabReservation(db.Model):
 class Event(db.Model):
     __tablename__ = "events"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     event_name = db.Column(db.String(255), nullable=False)
     organizer = db.Column(db.String(255), nullable=False)
     location = db.Column(db.String(255), nullable=False)
@@ -169,7 +178,7 @@ class Event(db.Model):
 class EventReservation(db.Model):
     __tablename__ = "event_reservation"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     profile_id = db.Column(db.BigInteger, db.ForeignKey("profile.id"), nullable=False)
     event_id = db.Column(db.BigInteger, db.ForeignKey("events.id"), nullable=False)
     status = db.Column(
@@ -212,7 +221,7 @@ class EventReservation(db.Model):
 class UsedItem(db.Model):
     __tablename__ = "used_items"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     profile_id = db.Column(db.BigInteger, db.ForeignKey("profile.id"), nullable=False)
     item_name = db.Column(db.String(255), nullable=False)
     condition = db.Column(db.String(255), nullable=False)
@@ -252,7 +261,7 @@ class UsedItem(db.Model):
 class LostAndFound(db.Model):
     __tablename__ = "lost_and_found"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     profile_id = db.Column(db.BigInteger, db.ForeignKey("profile.id"), nullable=False)
     item_name = db.Column(db.String(255), nullable=False)
     type = db.Column(db.String(255), nullable=False)  # 'lost' or 'found'
@@ -285,7 +294,7 @@ class LostAndFound(db.Model):
 class Notification(db.Model):
     __tablename__ = "notification"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     profile_id = db.Column(db.BigInteger, db.ForeignKey("profile.id"), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False)
@@ -312,7 +321,7 @@ class Notification(db.Model):
 class PasswordReset(db.Model):
     __tablename__ = "password_reset"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     profile_id = db.Column(db.BigInteger, db.ForeignKey("profile.id"), nullable=False)
     code = db.Column(db.String(255), nullable=False)
     reset_session_token = db.Column(db.String(255), nullable=False)
@@ -340,7 +349,7 @@ class PasswordReset(db.Model):
 class SavedItem(db.Model):
     __tablename__ = "saved_items"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     profile_id = db.Column(db.BigInteger, db.ForeignKey("profile.id"), nullable=False)
     used_item_id = db.Column(db.BigInteger, db.ForeignKey("used_items.id"), nullable=False)
     created_at = db.Column(
@@ -365,7 +374,7 @@ class SavedItem(db.Model):
 class StarredEvent(db.Model):
     __tablename__ = "starred_events"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BIGINT_ID, primary_key=True)
     profile_id = db.Column(db.BigInteger, db.ForeignKey("profile.id"), nullable=False)
     event_id = db.Column(db.BigInteger, db.ForeignKey("events.id"), nullable=False)
     created_at = db.Column(

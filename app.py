@@ -1,18 +1,34 @@
 import os
+import time
+from datetime import timedelta
+from hmac import compare_digest
 
 from dotenv import load_dotenv
-from flask import Flask, g, redirect, render_template, session, url_for
+from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 from flask_migrate import Migrate
 from sqlalchemy import text
 
 from models import Profile, db
+from routes.admin_roles_pages import admin_roles_pages
 from routes.auth_pages import auth_pages
+from routes.event_management_pages import event_management_pages
 from routes.events_pages import events_pages
+from routes.labs_pages import labs_pages
+from routes.profile_pages import profile_pages
+from services.csrf import csrf_token
+from services.roles import ADMIN_ROLE, EVENT_MANAGER_ROLE, role_label
 
 load_dotenv()
 
 app = Flask(__name__, static_folder="public/static", static_url_path="/static")
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
+secret_key = os.getenv("SECRET_KEY")
+if not secret_key:
+    raise RuntimeError("SECRET_KEY must be configured with a strong random value.")
+app.config["SECRET_KEY"] = secret_key
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
+app.config["MAIL_EMAIL"] = os.getenv("MAIL_EMAIL")
+app.config["MAIL_APP_PASSWORD"] = os.getenv("MAIL_APP_PASSWORD")
 
 database_url = os.getenv("DATABASE_URL")
 if database_url and database_url.startswith("postgresql://"):
@@ -26,14 +42,66 @@ migrate = Migrate(app, db)
 
 app.register_blueprint(auth_pages)
 app.register_blueprint(events_pages)
+app.register_blueprint(labs_pages)
+app.register_blueprint(profile_pages)
+app.register_blueprint(admin_roles_pages)
+app.register_blueprint(event_management_pages)
+
+
+@app.context_processor
+def inject_template_helpers():
+    return {
+        "csrf_token": csrf_token,
+        "role_label": role_label,
+        "admin_role": ADMIN_ROLE,
+        "event_manager_role": EVENT_MANAGER_ROLE,
+    }
 
 
 @app.before_request
 def load_current_user():
-    if getattr(g, "current_user", None) is None:
-        user_id = session.get("profile_id") or session.get("user_id")
-        if user_id:
-            g.current_user = db.session.get(Profile, user_id)
+    g.current_user = None
+    if request.endpoint == "static":
+        return
+
+    profile_id = session.get("profile_id")
+    auth_token = session.get("auth_token")
+
+    if profile_id is None and auth_token is None:
+        session.pop("user_id", None)
+        return
+
+    user = db.session.get(Profile, profile_id) if isinstance(profile_id, int) else None
+    if (
+        user is None
+        or not isinstance(auth_token, str)
+        or not isinstance(user.tokens, str)
+        or not compare_digest(user.tokens, auth_token)
+    ):
+        session.pop("profile_id", None)
+        session.pop("auth_token", None)
+        session.pop("auth_last_activity", None)
+        flash("Your session is no longer active. Please log in again.", "error")
+        return
+
+    now = time.time()
+    last_activity = session.get("auth_last_activity")
+    if (
+        not isinstance(last_activity, (int, float))
+        or isinstance(last_activity, bool)
+        or now - last_activity >= app.permanent_session_lifetime.total_seconds()
+    ):
+        user.tokens = None
+        db.session.commit()
+        session.pop("profile_id", None)
+        session.pop("auth_token", None)
+        session.pop("auth_last_activity", None)
+        flash("You were logged out after one hour of inactivity.", "error")
+        return
+
+    session.permanent = True
+    session["auth_last_activity"] = now
+    g.current_user = user
 
 
 @app.route("/")
@@ -48,13 +116,6 @@ def home():
     if not getattr(g, "current_user", None):
         return redirect(url_for("auth_pages.login"))
     return render_template("home.html")
-
-
-@app.route("/labs")
-def labs():
-    if not getattr(g, "current_user", None):
-        return redirect(url_for("auth_pages.login"))
-    return render_template("labs.html")
 
 
 @app.route("/health")

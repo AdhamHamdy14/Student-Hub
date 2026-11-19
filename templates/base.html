@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app/css/base.css') }}">
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <svg width="0" height="0" style="position:absolute">
     <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
     <symbol id="pin" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
@@ -20,6 +20,11 @@
     <symbol id="flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M8 15h8"/></symbol>
     <symbol id="cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18M9 16l2 2 4-4"/></symbol>
     <symbol id="doc" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+    <symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></symbol>
+    <symbol id="camera" viewBox="0 0 24 24"><path d="M14 4H7L5 7H3v13h18V7h-2l-2-3h-3"/><circle cx="12" cy="13" r="4"/></symbol>
+    <symbol id="eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7h.01"/></symbol>
+    <symbol id="verified" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
   </svg>
 
   <header class="navbar">
@@ -28,22 +33,42 @@
       <span class="brand-name">Student Hub</span>
       <span class="brand-pill">FOE-AU</span>
     </a>
-    <nav class="nav-links">
-      <a href="{{ url_for('home') }}" class="nav-link{% if request.endpoint == 'home' %} active{% endif %}">Home</a>
-      <a href="{{ url_for('labs') }}" class="nav-link{% if request.endpoint == 'labs' %} active{% endif %}">Labs</a>
-      <a href="{{ url_for('events') }}" class="nav-link{% if request.endpoint in ['events', 'event_details', 'event_registered'] %} active{% endif %}">Events</a>
-      <a href="#" class="nav-link">Used Items</a>
-      <a href="#" class="nav-link">Lost &amp; Found</a>
-    </nav>
-    <div class="user-pill">
-      <div class="avatar">{{ g.current_user.name[:1]|upper }}</div>
-      <div class="user-details">
-        <span>{{ g.current_user.name }}</span>
-        <small class="user-role">{{ g.current_user.role|replace('_', ' ')|title }}</small>
+    <button class="mobile-menu-toggle" type="button" aria-controls="primary-navigation" aria-expanded="false" aria-label="Open navigation menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <div class="primary-navigation" id="primary-navigation">
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="{{ url_for('home') }}" class="nav-link{% if request.endpoint == 'home' %} active{% endif %}">Home</a>
+        <a href="{{ url_for('labs_pages.labs') }}" class="nav-link{% if request.endpoint.startswith('labs_pages.') %} active{% endif %}">Labs</a>
+        {% if g.current_user.role in [admin_role, event_manager_role] %}
+          <a href="{{ url_for('event_management_pages.index') }}" class="nav-link{% if request.endpoint.startswith('event_management_pages.') %} active{% endif %}">Events</a>
+        {% else %}
+          <a href="{{ url_for('events_pages.events') }}" class="nav-link{% if request.endpoint in ['events_pages.events', 'events_pages.event_details', 'events_pages.event_registered'] %} active{% endif %}">Events</a>
+        {% endif %}
+        <a href="#" class="nav-link">Used Items</a>
+        <a href="#" class="nav-link">Lost &amp; Found</a>
+        {% if g.current_user.role == admin_role %}
+          <a href="{{ url_for('admin_roles_pages.index') }}" class="nav-link{% if request.endpoint.startswith('admin_roles_pages.') %} active{% endif %}">Manage Roles</a>
+        {% endif %}
+      </nav>
+      <div class="user-pill">
+        <a class="user-account-link" href="{{ url_for('profile_pages.index') }}">
+          <div class="avatar">{{ g.current_user.name[:1]|upper }}</div>
+          <div class="user-details">
+            <span>{{ g.current_user.name }}</span>
+            <small class="user-role">{{ role_label(g.current_user.role) }}</small>
+          </div>
+        </a>
+        <form class="logout-form" action="{{ url_for('auth_pages.logout') }}" method="post">
+          <button class="logout-button" type="submit">Log out</button>
+        </form>
       </div>
-      <form class="logout-form" action="{{ url_for('auth_pages.logout') }}" method="post">
-        <button class="logout-button" type="submit">Log out</button>
-      </form>
+      <a class="mobile-profile-option{% if request.endpoint.startswith('profile_pages.') %} active{% endif %}" href="{{ url_for('profile_pages.index') }}">
+        <svg aria-hidden="true"><use href="#user"/></svg>
+        <span><strong>Profile</strong><small>{{ g.current_user.name }} · {{ role_label(g.current_user.role) }}</small></span>
+      </a>
     </div>
   </header>
 
@@ -56,5 +81,7 @@
     <div class="footer-center">© 2026 Student Hub. All rights reserved.</div>
     <div class="footer-right"><a href="#">User Guide</a></div>
   </footer>
+  <script src="{{ url_for('static', filename='app/js/base.js') }}" defer></script>
+  {% block extra_scripts %}{% endblock %}
 </body>
 </html>
