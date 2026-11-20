@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.item_name }} - Lost &amp; Found{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/lost_found.css') }}">
+<script src="{{ url_for('static', filename='app/js/lost_found.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="lf-container">
+  <div class="lf-details-wrapper">
+    <a href="{{ url_for('lost_found_pages.lost_found') }}" class="back-link">← Back to Lost &amp; Found</a>
+
+    <div class="details-layout">
+      <!-- Left Column: Photo, Notes, and Bidirectional Suggestions -->
+      <div class="details-left-col">
+        <div class="details-main">
+          {% if item.image_url %}
+          <div class="large-preview has-photo">
+            <img src="{{ url_for('static', filename=item.image_url) }}" alt="{{ item.item_name }}">
+          </div>
+          {% else %}
+          <div class="large-preview">
+            <span class="large-preview-icon">{{ category_icon }}</span>
+            <span>{{ item.item_name }}</span>
+          </div>
+          {% endif %}
+
+          <div>
+            <div class="section-label">Report Notes</div>
+            <p class="body-text">
+              {{ item.description or "No additional description provided. Contact the publisher on WhatsApp for verification and handover details." }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Suggested Matches (Found <-> Lost) -->
+        <section class="suggestions-card">
+          <div class="suggestions-head">
+            <div>
+              <h2 class="suggestions-title">
+                {% if item.type == 'lost' %}
+                  ✨ Suggested Found Items
+                {% else %}
+                  ✨ Matching Lost Item Reports
+                {% endif %}
+              </h2>
+              <p class="suggestions-sub">
+                {% if item.type == 'lost' %}
+                  Found posts on campus that match this lost item:
+                {% else %}
+                  Students looking for a similar item:
+                {% endif %}
+              </p>
+            </div>
+          </div>
+
+          {% if suggestions %}
+          <div class="suggestions-list">
+            {% for s in suggestions %}
+            <div class="suggestion-row">
+              <div class="suggestion-info">
+                <div class="suggestion-top">
+                  <span class="badge {% if s.report_type == 'found' %}badge-found{% else %}badge-lost{% endif %}">
+                    {{ 'Found' if s.report_type == 'found' else 'Lost' }}
+                  </span>
+                  <span class="category-tag">{{ s.category }}</span>
+                  <span class="suggestion-time">{{ s.time_ago }}</span>
+                </div>
+                <a href="{{ url_for('lost_found_pages.item_details', item_id=s.id) }}" class="suggestion-item-title">
+                  {{ s.title }}
+                </a>
+                <div class="suggestion-meta">
+                  <span>📍 {{ s.location }}</span>
+                  <span>👤 {{ s.publisher_name }}</span>
+                </div>
+              </div>
+              <div class="suggestion-actions">
+                <a href="{{ s.whatsapp_url }}" target="_blank" rel="noopener noreferrer" class="btn-whatsapp btn-sm">💬 WhatsApp</a>
+                <a href="{{ url_for('lost_found_pages.item_details', item_id=s.id) }}" class="btn-outline btn-sm">View</a>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="muted-empty">No similar {{ 'found' if item.type == 'lost' else 'lost' }} posts yet. You will receive a notification automatically if a matching report is posted.</p>
+          {% endif %}
+        </section>
+      </div>
+
+      <!-- Right Sidebar: Publisher, Metadata, WhatsApp & Owner/Admin Controls -->
+      <aside class="reporter-sidebar">
+        <div>
+          <div class="details-badge-row">
+            <span class="category-tag">{{ item.category }}</span>
+            {% if item.type == 'found' %}
+            <span class="badge badge-found">Found Item</span>
+            {% else %}
+            <span class="badge badge-lost">Lost Item</span>
+            {% endif %}
+          </div>
+          <h1 class="details-item-title">{{ item.item_name }}</h1>
+        </div>
+
+        <div class="reporter-box">
+          <div class="reporter-avatar">{{ publisher.initials }}</div>
+          <div>
+            <div class="reporter-name">{{ publisher.name }}</div>
+            <div class="reporter-sub">{{ publisher.subtitle }}</div>
+          </div>
+        </div>
+
+        <div class="info-list">
+          <div class="info-row">
+            <span class="info-key">{{ 'Location Found' if item.type == 'found' else 'Last Seen Location' }}</span>
+            <span class="info-val">{{ item.location or 'FOE-AU Campus' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Posted</span>
+            <span class="info-val">{{ time_ago }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">WhatsApp Contact</span>
+            <span class="info-val">{{ item.phone_number }}</span>
+          </div>
+        </div>
+
+        {% if not is_owner %}
+        <div class="sidebar-cta-stack">
+          <a href="{{ whatsapp_url }}" target="_blank" rel="noopener noreferrer" class="btn-whatsapp btn-whatsapp-lg">
+            💬 Contact on WhatsApp
+          </a>
+          <p class="whatsapp-hint">Opens WhatsApp directly to coordinate campus pickup.</p>
+        </div>
+        {% endif %}
+
+        {% if is_owner or can_delete %}
+        <div class="manage-post-box">
+          <div class="section-label">Manage Post</div>
+
+          {% if is_owner %}
+          <form method="post" action="{{ url_for('lost_found_pages.mark_returned', item_id=item.id) }}" class="js-confirm-form" data-confirm="Confirm this item was returned to its original owner? This post will be automatically deleted from the database.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-returned-full">🤝 Mark as Returned to Owner</button>
+          </form>
+          {% endif %}
+
+          <div class="manage-row">
+            {% if can_edit %}
+            <a href="{{ url_for('lost_found_pages.edit_item', item_id=item.id) }}" class="btn-outline btn-manage">✏️ Edit Details</a>
+            {% endif %}
+
+            {% if can_delete %}
+            <form method="post" action="{{ url_for('lost_found_pages.delete_item', item_id=item.id) }}" class="manage-delete-form js-confirm-form" data-confirm="Delete this post permanently?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-delete-post">🗑️ Delete Post</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </aside>
+    </div>
+  </div>
+</div>
+{% endblock %}

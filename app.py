@@ -18,6 +18,7 @@ from routes.profile_pages import profile_pages
 from services.csrf import csrf_token
 from services.roles import ADMIN_ROLE, EVENT_MANAGER_ROLE, role_label
 from routes.home_pages import home_pages
+from routes.lost_found_pages import lost_found_pages
 
 load_dotenv()
 
@@ -48,6 +49,9 @@ app.register_blueprint(profile_pages)
 app.register_blueprint(admin_roles_pages)
 app.register_blueprint(event_management_pages)
 app.register_blueprint(home_pages)
+app.register_blueprint(lost_found_pages)
+
+app.add_url_rule("/lost-found", endpoint="lost_found", view_func=app.view_functions["lost_found_pages.lost_found"])
 
 @app.context_processor
 def inject_template_helpers():

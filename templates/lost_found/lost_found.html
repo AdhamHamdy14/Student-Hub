@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Student Hub - Lost &amp; Found{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/lost_found.css') }}">
+<script src="{{ url_for('static', filename='app/js/lost_found.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="lf-container">
+  <div class="lf-workspace">
+    <!-- Left Vertical Sidebar -->
+    <aside class="lf-sidebar">
+      <div class="lf-sidebar-top">
+        <a href="{{ url_for('lost_found_pages.create_item') }}" class="btn-post-sidebar">+ Report an Item</a>
+
+        <div class="sidebar-group">
+          <div class="sidebar-heading">Report Views</div>
+          <a href="{{ url_for('lost_found_pages.lost_found', view='all', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'all' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>📋</span><span>All Reports</span></span>
+            <span class="sidebar-count">{{ counts.all }}</span>
+          </a>
+          <a href="{{ url_for('lost_found_pages.lost_found', view='found', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'found' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>✅</span><span>Found Items</span></span>
+            <span class="sidebar-count">{{ counts.found }}</span>
+          </a>
+          <a href="{{ url_for('lost_found_pages.lost_found', view='lost', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'lost' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>🔎</span><span>Lost Items</span></span>
+            <span class="sidebar-count">{{ counts.lost }}</span>
+          </a>
+          <a href="{{ url_for('lost_found_pages.lost_found', view='mine', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'mine' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>📌</span><span>My Reports</span></span>
+            <span class="sidebar-count">{{ counts.mine }}</span>
+          </a>
+        </div>
+
+        <div class="sidebar-group">
+          <div class="sidebar-heading">Categories</div>
+          <a href="{{ url_for('lost_found_pages.lost_found', view=active_view, q=search_query) }}"
+             class="sidebar-item {% if not active_category %}active{% endif %}">
+            <span class="sidebar-item-left"><span>🗂️</span><span>All Categories</span></span>
+          </a>
+          {% for cat in categories %}
+          <a href="{{ url_for('lost_found_pages.lost_found', view=active_view, category=cat.slug, q=search_query) }}"
+             class="sidebar-item {% if active_category == cat.slug %}active{% endif %}">
+            <span class="sidebar-item-left"><span>{{ cat.icon }}</span><span>{{ cat.label }}</span></span>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="lf-main">
+      <div class="lf-header">
+        <div>
+          <h1 class="lf-title">Campus Lost &amp; Found</h1>
+          <p class="lf-subtitle">Report lost or found belongings across FOE-AU and coordinate handover directly via WhatsApp.</p>
+        </div>
+
+        <form method="get" action="{{ url_for('lost_found_pages.lost_found') }}" class="lf-search-form">
+          <input type="hidden" name="view" value="{{ active_view }}">
+          {% if active_category %}
+          <input type="hidden" name="category" value="{{ active_category }}">
+          {% endif %}
+          <span class="search-icon">🔍</span>
+          <input
+            type="search"
+            name="q"
+            value="{{ search_query }}"
+            class="lf-search-input"
+            placeholder="Search university ID, keys, USB..."
+          >
+        </form>
+      </div>
+
+      {% if cards %}
+      <div class="items-grid">
+        {% for card in cards %}
+        <article class="lf-card">
+          <div>
+            <a href="{{ url_for('lost_found_pages.item_details', item_id=card.id) }}" class="item-thumb-link">
+              {% if card.image_url %}
+              <div class="item-thumb has-photo">
+                <img src="{{ url_for('static', filename=card.image_url) }}" alt="{{ card.title }}">
+              </div>
+              {% else %}
+              <div class="item-thumb">
+                <span class="thumb-icon">{{ card.category_icon }}</span>
+                <span>{{ card.category }}</span>
+              </div>
+              {% endif %}
+            </a>
+
+            <div class="card-body">
+              <div class="card-header-row">
+                <span class="category-tag">{{ card.category }}</span>
+                {% if card.report_type == 'found' %}
+                <span class="badge badge-found">Found</span>
+                {% else %}
+                <span class="badge badge-lost">Lost</span>
+                {% endif %}
+              </div>
+
+              <h2 class="item-title">
+                <a href="{{ url_for('lost_found_pages.item_details', item_id=card.id) }}">{{ card.title }}</a>
+              </h2>
+
+              <div class="item-meta">
+                <span>📍 {{ card.location }}</span>
+                <span>{{ card.time_ago }}</span>
+              </div>
+
+              <div class="item-publisher">
+                <span>👤 {{ card.publisher_name }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-actions">
+            {% if not card.is_owner %}
+            <a href="{{ card.whatsapp_url }}" target="_blank" rel="noopener noreferrer" class="btn-whatsapp">
+              💬 WhatsApp
+            </a>
+            {% endif %}
+            <a href="{{ url_for('lost_found_pages.item_details', item_id=card.id) }}" class="btn-outline{% if card.is_owner %} btn-details-owner{% endif %}">
+              Details
+            </a>
+            {% if card.can_edit %}
+            <a href="{{ url_for('lost_found_pages.edit_item', item_id=card.id) }}" class="btn-icon-action" title="Edit post">
+              ✏️
+            </a>
+            {% endif %}
+            {% if card.can_delete %}
+            <form method="post" action="{{ url_for('lost_found_pages.delete_item', item_id=card.id) }}" class="inline-form js-confirm-form" data-confirm="Delete this post permanently?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-icon-action btn-danger-icon" title="Delete post">🗑️</button>
+            </form>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="lf-empty-state">
+        <h3>No matching reports found</h3>
+        <p>Try clearing your filters or publish a new Lost &amp; Found report for the campus community.</p>
+        <a href="{{ url_for('lost_found_pages.create_item') }}" class="btn-primary-inline">+ Report an Item</a>
+      </div>
+      {% endif %}
+    </main>
+  </div>
+</div>
+{% endblock %}

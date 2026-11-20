@@ -277,6 +277,12 @@ class LostAndFound(db.Model):
     description = db.Column(db.Text, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
     image_url = db.Column(db.String(255), nullable=True)
+    is_anonymous = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
     created_at = db.Column(
         db.DateTime,
         nullable=False,

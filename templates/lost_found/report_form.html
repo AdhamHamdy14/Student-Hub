@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit Report' if mode == 'edit' else 'Report a Lost or Found Item' }} - Student Hub{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/lost_found.css') }}">
+<script src="{{ url_for('static', filename='app/js/lost_found.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+{% set current_type = form_data.get('report_type') or (item.type if item else 'found') %}
+{% set current_title = form_data.get('title') or (item.item_name if item else '') %}
+{% set current_category = form_data.get('category') or (item.category if item else 'Electronics & Keys') %}
+{% set current_location = form_data.get('location') or (item.location if item else '') %}
+{% set current_desc = form_data.get('description') or (item.description if item else '') %}
+{% set is_anon = (form_data.get('is_anonymous') == 'on') if form_data else (item.is_anonymous if item else false) %}
+{% set using_custom_wa = (form_data.get('whatsapp_mode') == 'custom') if form_data else (true if (item and item.phone_number != account_whatsapp) or not account_whatsapp else false) %}
+{% set temp_wa_value = form_data.get('temp_whatsapp') or (item.phone_number if (item and item.phone_number != account_whatsapp) else '') %}
+
+<div class="lf-container">
+  <div class="lf-form-wrapper">
+    <a href="{{ url_for('lost_found_pages.item_details', item_id=item.id) if mode == 'edit' else url_for('lost_found_pages.lost_found') }}" class="back-link">
+      ← {{ 'Back to Item Details' if mode == 'edit' else 'Back to Lost & Found' }}
+    </a>
+
+    <form
+      method="post"
+      enctype="multipart/form-data"
+      action="{{ url_for('lost_found_pages.edit_item', item_id=item.id) if mode == 'edit' else url_for('lost_found_pages.create_item') }}"
+      class="post-card"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div>
+        <h1 class="form-page-title">{{ 'Edit Lost & Found Report' if mode == 'edit' else 'Report a Lost or Found Item' }}</h1>
+        <p class="lf-subtitle">Help return misplaced items to their owners across FOE-AU.</p>
+      </div>
+
+      <!-- Report Type Toggle -->
+      <div class="field-group">
+        <span class="field-label">Report Type</span>
+        <div class="type-toggle">
+          <label class="type-box {% if current_type == 'found' %}selected-found{% endif %}" data-type-box="found">
+            <input type="radio" name="report_type" value="found" class="sr-only" {% if current_type == 'found' %}checked{% endif %}>
+            <div class="type-title type-title-found">✅ I Found an Item</div>
+            <div class="type-desc">You found something and want to return it</div>
+          </label>
+
+          <label class="type-box {% if current_type == 'lost' %}selected-lost{% endif %}" data-type-box="lost">
+            <input type="radio" name="report_type" value="lost" class="sr-only" {% if current_type == 'lost' %}checked{% endif %}>
+            <div class="type-title type-title-lost">🔎 I Lost an Item</div>
+            <div class="type-desc">Post details so finders can message you</div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Item Name & Category -->
+      <div class="two-col-inputs">
+        <div class="field-group">
+          <label for="title" class="field-label">Item Name *</label>
+          <input
+            id="title"
+            name="title"
+            type="text"
+            required
+            maxlength="255"
+            value="{{ current_title }}"
+            class="field-input"
+            placeholder="e.g., Black SanDisk 32GB USB Drive"
+          >
+        </div>
+
+        <div class="field-group">
+          <label for="category" class="field-label">Category *</label>
+          <select id="category" name="category" class="field-input" required>
+            {% for cat in categories %}
+            <option value="{{ cat.slug }}" {% if current_category == cat.slug %}selected{% endif %}>
+              {{ cat.icon }} {{ cat.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Location & Publisher Privacy -->
+      <div class="two-col-inputs">
+        <div class="field-group">
+          <label for="location" class="field-label">Campus Location *</label>
+          <input
+            id="location"
+            name="location"
+            type="text"
+            required
+            maxlength="255"
+            value="{{ current_location }}"
+            class="field-input"
+            placeholder="e.g., Microcontroller Lab / Hall 3"
+          >
+        </div>
+
+        <div class="field-group">
+          <span class="field-label">Publisher Identity</span>
+          <label class="privacy-toggle-box">
+            <input type="checkbox" name="is_anonymous" id="isAnonymousCheck" {% if is_anon %}checked{% endif %}>
+            <div>
+              <div class="privacy-title">Hide my name (Anonymous member)</div>
+              <div class="privacy-sub" id="publisherPreviewText">
+                {% if is_anon %}
+                  Displayed as: <strong>Anonymous member</strong>
+                {% else %}
+                  Displayed as: <strong>{{ g.current_user.name }}</strong>
+                {% endif %}
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- WhatsApp Number Selection -->
+      <div class="field-group">
+        <span class="field-label">WhatsApp Contact Number *</span>
+        <div class="whatsapp-choice-grid">
+          <label class="wa-option-card {% if not using_custom_wa %}active{% endif %}" id="waAccountCard">
+            <input
+              type="radio"
+              name="whatsapp_mode"
+              value="account"
+              {% if not using_custom_wa %}checked{% endif %}
+              {% if not account_whatsapp %}disabled{% endif %}
+            >
+            <div>
+              <div class="wa-option-title">Use my account WhatsApp number</div>
+              <div class="wa-option-sub">
+                {% if account_whatsapp %}
+                  {{ account_whatsapp }}
+                {% else %}
+                  No phone number saved in your profile
+                {% endif %}
+              </div>
+            </div>
+          </label>
+
+          <label class="wa-option-card {% if using_custom_wa %}active{% endif %}" id="waCustomCard">
+            <input
+              type="radio"
+              name="whatsapp_mode"
+              value="custom"
+              {% if using_custom_wa %}checked{% endif %}
+            >
+            <div>
+              <div class="wa-option-title">Use a temporary number for this post</div>
+              <div class="wa-option-sub">Only used on this report; won't change your profile</div>
+            </div>
+          </label>
+        </div>
+
+        <div id="tempWhatsappBox" class="temp-wa-input-wrap" {% if not using_custom_wa %}hidden{% endif %}>
+          <input
+            type="tel"
+            name="temp_whatsapp"
+            id="tempWhatsappInput"
+            value="{{ temp_wa_value }}"
+            class="field-input"
+            placeholder="Enter temporary WhatsApp number (e.g., 01012345678)"
+          >
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="field-group">
+        <label for="description" class="field-label">Report Notes / Identifying Details</label>
+        <textarea
+          id="description"
+          name="description"
+          rows="4"
+          class="field-textarea"
+          placeholder="Add distinguishing marks, time found/lost, or instructions for verifying ownership..."
+        >{{ current_desc }}</textarea>
+      </div>
+
+      <!-- Photo Upload -->
+      <div class="field-group">
+        <label for="photoInput" class="field-label">Item Photo (Optional)</label>
+        <label for="photoInput" class="upload-dropzone" id="photoDropzone">
+          <input type="file" name="photo" id="photoInput" accept="image/png,image/jpeg,image/webp" class="sr-only">
+          <span id="photoLabelText">
+            {% if item and item.image_url %}
+              📷 Current photo attached — click to replace (JPG, PNG, WEBP)
+            {% else %}
+              📷 Click to upload item photo (JPG, PNG, WEBP)
+            {% endif %}
+          </span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn-primary-full">
+        {{ 'Save Changes' if mode == 'edit' else 'Publish Report' }}
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
