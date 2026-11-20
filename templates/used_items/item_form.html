@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit Listing' if mode == 'edit' else 'Post a Used Item' }} - Student Hub{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/used_items.css') }}">
+<script src="{{ url_for('static', filename='app/js/used_items.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+{% set current_type = form_data.get('listing_type') or (item.listing_type if item else 'free') %}
+{% set current_title = form_data.get('title') or (item.item_name if item else '') %}
+{% set current_category = form_data.get('category') or (item.category if item else 'Electronics & Kits') %}
+{% set current_condition = form_data.get('condition') or (item.condition if item else 'Like New') %}
+{% set current_meeting = form_data.get('meeting_point') or (item.meeting_point if item else '') %}
+{% set current_price = form_data.get('price') or (item.price|int if (item and item.price == item.price|int) else (item.price if item else '')) %}
+{% set current_desc = form_data.get('description') or (item.description if item else '') %}
+{% set is_anon = (form_data.get('is_anonymous') == 'on') if form_data else (item.is_anonymous if item else false) %}
+{% set using_custom_wa = (form_data.get('whatsapp_mode') == 'custom') if form_data else (true if (item and item.phone_number != account_whatsapp) or not account_whatsapp else false) %}
+{% set temp_wa_value = form_data.get('temp_whatsapp') or (item.phone_number if (item and item.phone_number != account_whatsapp) else '') %}
+
+<div class="ui-container">
+  <div class="ui-form-wrapper">
+    <a href="{{ url_for('used_items_pages.item_details', item_id=item.id) if mode == 'edit' else url_for('used_items_pages.used_items') }}" class="back-link">
+      ← {{ 'Back to Item Details' if mode == 'edit' else 'Back to used items' }}
+    </a>
+
+    <form
+      method="post"
+      enctype="multipart/form-data"
+      action="{{ url_for('used_items_pages.edit_item', item_id=item.id) if mode == 'edit' else url_for('used_items_pages.create_item') }}"
+      class="post-card"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div>
+        <h1 class="form-page-title">{{ 'Edit Used Item Listing' if mode == 'edit' else 'Post a Used Item' }}</h1>
+        <p class="ui-subtitle">Share unneeded engineering tools, kits, or books with fellow students.</p>
+      </div>
+
+      <!-- Row 1: Listing Option (matches Report Type in Lost & Found) -->
+      <div class="field-group">
+        <span class="field-label">Listing Option</span>
+        <div class="type-toggle">
+          <label class="type-box {% if current_type == 'free' %}selected-free{% endif %}" data-type-box="free">
+            <input type="radio" name="listing_type" value="free" class="sr-only" {% if current_type == 'free' %}checked{% endif %}>
+            <div class="type-title type-title-free">🎁 Free Donation</div>
+            <div class="type-desc">Give it away for free to a peer</div>
+          </label>
+
+          <label class="type-box {% if current_type == 'sale' %}selected-sale{% endif %}" data-type-box="sale">
+            <input type="radio" name="listing_type" value="sale" class="sr-only" {% if current_type == 'sale' %}checked{% endif %}>
+            <div class="type-title type-title-sale">🏷️ For Sale</div>
+            <div class="type-desc">Set a student-friendly price (EGP)</div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Row 2: Item Title + Category (matches Item Name + Category) -->
+      <div class="two-col-inputs">
+        <div class="field-group">
+          <label for="title" class="field-label">Item Title *</label>
+          <input
+            id="title"
+            name="title"
+            type="text"
+            required
+            maxlength="255"
+            value="{{ current_title }}"
+            class="field-input"
+            placeholder="e.g., Arduino UNO R3 Starter Kit"
+          >
+        </div>
+
+        <div class="field-group">
+          <label for="category" class="field-label">Category *</label>
+          <select id="category" name="category" class="field-input" required>
+            {% for cat in categories %}
+            <option value="{{ cat.slug }}" {% if current_category == cat.slug %}selected{% endif %}>
+              {{ cat.icon }} {{ cat.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Row 3: Campus Meeting Point + Publisher Identity (matches Campus Location + Publisher Identity) -->
+      <div class="two-col-inputs">
+        <div class="field-group">
+          <label for="meeting_point" class="field-label">Campus Meeting Point</label>
+          <input
+            id="meeting_point"
+            name="meeting_point"
+            type="text"
+            maxlength="255"
+            value="{{ current_meeting }}"
+            class="field-input"
+            placeholder="e.g., Main Gate / Central Library"
+          >
+        </div>
+
+        <div class="field-group">
+          <span class="field-label">Publisher Identity</span>
+          <label class="privacy-toggle-box">
+            <input type="checkbox" name="is_anonymous" id="isAnonymousCheck" {% if is_anon %}checked{% endif %}>
+            <div>
+              <div class="privacy-title">Hide my name (Anonymous member)</div>
+              <div
+                class="privacy-sub"
+                id="publisherPreviewText"
+                data-user-name="{{ g.current_user.name or 'Student' }}"
+              >
+                {% if is_anon %}
+                  Displayed as: <strong>Anonymous member</strong>
+                {% else %}
+                  Displayed as: <strong>{{ g.current_user.name or 'Student' }}</strong>
+                {% endif %}
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Row 4: Condition + Price (EGP) -->
+      <div class="two-col-inputs">
+        <div class="field-group">
+          <label for="condition" class="field-label">Condition *</label>
+          <select id="condition" name="condition" class="field-input" required>
+            {% for cond in conditions %}
+            <option value="{{ cond }}" {% if current_condition == cond %}selected{% endif %}>{{ cond }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field-group" id="priceFieldGroup">
+          <label for="priceInput" class="field-label" id="priceFieldLabel">
+            {{ 'Price (EGP) *' if current_type == 'sale' else 'Price (Free Donation)' }}
+          </label>
+          <input
+            id="priceInput"
+            name="price"
+            type="number"
+            step="1"
+            min="1"
+            max="999999"
+            value="{{ current_price if current_type == 'sale' else '' }}"
+            class="field-input"
+            placeholder="{{ 'e.g., 250' if current_type == 'sale' else '0 EGP (Free)' }}"
+            {% if current_type == 'sale' %}required{% else %}disabled{% endif %}
+          >
+        </div>
+      </div>
+
+      <!-- Row 5: WhatsApp Number Selection (matches Lost & Found) -->
+      <div class="field-group">
+        <span class="field-label">WhatsApp Contact Number *</span>
+        <div class="whatsapp-choice-grid">
+          <label class="wa-option-card {% if not using_custom_wa %}active{% endif %}" id="waAccountCard">
+            <input
+              type="radio"
+              name="whatsapp_mode"
+              value="account"
+              {% if not using_custom_wa %}checked{% endif %}
+              {% if not account_whatsapp %}disabled{% endif %}
+            >
+            <div>
+              <div class="wa-option-title">Use my account WhatsApp number</div>
+              <div class="wa-option-sub">
+                {% if account_whatsapp %}
+                  {{ account_whatsapp }}
+                {% else %}
+                  No phone number saved in your profile
+                {% endif %}
+              </div>
+            </div>
+          </label>
+
+          <label class="wa-option-card {% if using_custom_wa %}active{% endif %}" id="waCustomCard">
+            <input
+              type="radio"
+              name="whatsapp_mode"
+              value="custom"
+              {% if using_custom_wa %}checked{% endif %}
+            >
+            <div>
+              <div class="wa-option-title">Use a temporary number for this post</div>
+              <div class="wa-option-sub">Only used on this listing; won't change your profile</div>
+            </div>
+          </label>
+        </div>
+
+        <div id="tempWhatsappBox" class="temp-wa-input-wrap" {% if not using_custom_wa %}hidden{% endif %}>
+          <input
+            type="tel"
+            name="temp_whatsapp"
+            id="tempWhatsappInput"
+            value="{{ temp_wa_value }}"
+            class="field-input"
+            placeholder="Enter temporary WhatsApp number (e.g., 01012345678)"
+          >
+        </div>
+      </div>
+
+      <!-- Row 6: Description -->
+      <div class="field-group">
+        <label for="description" class="field-label">Item Description</label>
+        <textarea
+          id="description"
+          name="description"
+          rows="4"
+          class="field-textarea"
+          placeholder="Describe included accessories, edition, or condition details..."
+        >{{ current_desc }}</textarea>
+      </div>
+
+      <!-- Row 7: Photo Upload -->
+      <div class="field-group">
+        <label for="photoInput" class="field-label">Item Photo (Optional)</label>
+        <label for="photoInput" class="upload-dropzone" id="photoDropzone">
+          <input type="file" name="photo" id="photoInput" accept="image/png,image/jpeg,image/webp" class="sr-only">
+          <span id="photoLabelText">
+            {% if item and item.image_url %}
+              📷 Current photo attached — click to replace (JPG, PNG, WEBP)
+            {% else %}
+              📷 Click to upload item photo (JPG, PNG, WEBP)
+            {% endif %}
+          </span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn-primary-full">
+        {{ 'Save Changes' if mode == 'edit' else 'Publish Listing' }}
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

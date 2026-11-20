@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.item_name }} - Used Items{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/used_items.css') }}">
+<script src="{{ url_for('static', filename='app/js/used_items.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="ui-container">
+  <div class="ui-details-wrapper">
+    <a href="{{ url_for('used_items_pages.used_items') }}" class="back-link">← Back to used items</a>
+
+    <div class="details-layout">
+      <!-- Left Column: Photo & Description -->
+      <div class="details-main">
+        {% if item.image_url %}
+        <div class="large-preview has-photo">
+          <img src="{{ url_for('static', filename=item.image_url) }}" alt="{{ item.item_name }}">
+        </div>
+        {% else %}
+        <div class="large-preview">
+          <span class="large-preview-icon">{{ category_icon }}</span>
+          <span>{{ item.item_name }}</span>
+        </div>
+        {% endif %}
+
+        <div>
+          <div class="section-label">Item Description</div>
+          <p class="body-text">
+            {{ item.description or "No additional description provided. Contact the seller on WhatsApp for pickup arrangements." }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Right Sidebar: Seller, Metadata, WhatsApp & Owner/Admin Controls -->
+      <aside class="seller-sidebar">
+        <div>
+          <div class="details-badge-row">
+            <span class="category-tag">{{ item.category }}</span>
+            {% if item.listing_type == 'free' %}
+            <span class="badge badge-free">{{ badge_text }}</span>
+            {% else %}
+            <span class="badge badge-sale">{{ badge_text }}</span>
+            {% endif %}
+          </div>
+          <h1 class="details-item-title">{{ item.item_name }}</h1>
+        </div>
+
+        <div class="seller-box">
+          <div class="seller-avatar">{{ seller.initials }}</div>
+          <div>
+            <div class="seller-name">{{ seller.name }}</div>
+            <div class="seller-sub">{{ seller.department }}</div>
+          </div>
+        </div>
+
+        <div class="info-list">
+          <div class="info-row">
+            <span class="info-key">Listing Type</span>
+            <span class="info-val {{ 'val-free' if item.listing_type == 'free' else '' }}">
+              {{ 'Free Giveaway / Donation' if item.listing_type == 'free' else 'For Sale (' ~ badge_text ~ ')' }}
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Condition</span>
+            <span class="info-val">{{ item.condition }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Campus Meeting Point</span>
+            <span class="info-val">{{ item.meeting_point or 'FOE-AU Campus' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">WhatsApp Contact</span>
+            <span class="info-val">{{ item.phone_number }}</span>
+          </div>
+        </div>
+
+        {% if not is_owner %}
+        <div class="sidebar-cta-row">
+          <a href="{{ whatsapp_url }}" target="_blank" rel="noopener noreferrer" class="btn-whatsapp btn-whatsapp-lg">
+            💬 Message Seller on WhatsApp
+          </a>
+          <form method="post" action="{{ url_for('used_items_pages.toggle_save', item_id=item.id) }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-save-lg {% if is_saved %}is-saved{% endif %}" title="{{ 'Unsave item' if is_saved else 'Save item' }}">
+              {{ '★' if is_saved else '☆' }}
+            </button>
+          </form>
+        </div>
+        {% endif %}
+
+        {% if is_owner or can_delete %}
+        <div class="manage-post-box">
+          <div class="section-label">Manage Listing</div>
+
+          {% if is_owner %}
+          <form method="post" action="{{ url_for('used_items_pages.mark_sold', item_id=item.id) }}" class="js-confirm-form" data-confirm="Mark this item as {{ 'given away' if item.listing_type == 'free' else 'sold' }}? This listing will be automatically removed from the database.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-completed-full">
+              {{ '🤝 Mark as Given Away' if item.listing_type == 'free' else '🤝 Mark as Sold' }}
+            </button>
+          </form>
+          {% endif %}
+
+          <div class="manage-row">
+            {% if can_edit %}
+            <a href="{{ url_for('used_items_pages.edit_item', item_id=item.id) }}" class="btn-outline btn-manage">✏️ Edit Details</a>
+            {% endif %}
+
+            {% if can_delete %}
+            <form method="post" action="{{ url_for('used_items_pages.delete_item', item_id=item.id) }}" class="manage-delete-form js-confirm-form" data-confirm="Delete this listing permanently?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-delete-post">🗑️ Delete Listing</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </aside>
+    </div>
+  </div>
+</div>
+{% endblock %}
