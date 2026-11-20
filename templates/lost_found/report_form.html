@@ -104,11 +104,15 @@
             <input type="checkbox" name="is_anonymous" id="isAnonymousCheck" {% if is_anon %}checked{% endif %}>
             <div>
               <div class="privacy-title">Hide my name (Anonymous member)</div>
-              <div class="privacy-sub" id="publisherPreviewText">
+              <div
+                class="privacy-sub"
+                id="publisherPreviewText"
+                data-user-name="{{ g.current_user.name or 'Student' }}"
+              >
                 {% if is_anon %}
                   Displayed as: <strong>Anonymous member</strong>
                 {% else %}
-                  Displayed as: <strong>{{ g.current_user.name }}</strong>
+                  Displayed as: <strong>{{ g.current_user.name or 'Student' }}</strong>
                 {% endif %}
               </div>
             </div>

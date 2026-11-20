@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Student Hub - Used Items{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='app/css/used_items.css') }}">
+<script src="{{ url_for('static', filename='app/js/used_items.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="ui-container">
+  <div class="ui-workspace">
+    <!-- Left Vertical Sidebar -->
+    <aside class="ui-sidebar">
+      <div class="ui-sidebar-top">
+        <a href="{{ url_for('used_items_pages.create_item') }}" class="btn-post-sidebar">+ Post an Item</a>
+
+        <div class="sidebar-group">
+          <div class="sidebar-heading">Marketplace Views</div>
+          <a href="{{ url_for('used_items_pages.used_items', view='all', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'all' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>🏪</span><span>Browse All</span></span>
+            <span class="sidebar-count">{{ counts.all }}</span>
+          </a>
+          <a href="{{ url_for('used_items_pages.used_items', view='free', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'free' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>🎁</span><span>Free Donations</span></span>
+            <span class="sidebar-count">{{ counts.free }}</span>
+          </a>
+          <a href="{{ url_for('used_items_pages.used_items', view='sale', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'sale' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>🏷️</span><span>For Sale</span></span>
+            <span class="sidebar-count">{{ counts.sale }}</span>
+          </a>
+          <a href="{{ url_for('used_items_pages.used_items', view='mine', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'mine' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>📦</span><span>My Listings</span></span>
+            <span class="sidebar-count">{{ counts.mine }}</span>
+          </a>
+          <a href="{{ url_for('used_items_pages.used_items', view='saved', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'saved' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>★</span><span>Saved Items</span></span>
+            <span class="sidebar-count">{{ counts.saved }}</span>
+          </a>
+        </div>
+
+        <div class="sidebar-group">
+          <div class="sidebar-heading">Categories</div>
+          <a href="{{ url_for('used_items_pages.used_items', view=active_view, q=search_query) }}"
+             class="sidebar-item {% if not active_category %}active{% endif %}">
+            <span class="sidebar-item-left"><span>🗂️</span><span>All Categories</span></span>
+          </a>
+          {% for cat in categories %}
+          <a href="{{ url_for('used_items_pages.used_items', view=active_view, category=cat.slug, q=search_query) }}"
+             class="sidebar-item {% if active_category == cat.slug %}active{% endif %}">
+            <span class="sidebar-item-left"><span>{{ cat.icon }}</span><span>{{ cat.label }}</span></span>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ui-main">
+      <div class="ui-header">
+        <div>
+          <h1 class="ui-title">Browse Used Items</h1>
+          <p class="ui-subtitle">List unneeded tools or books for sale or free donation, and coordinate with peers via WhatsApp.</p>
+        </div>
+
+        <form method="get" action="{{ url_for('used_items_pages.used_items') }}" class="ui-search-form">
+          <input type="hidden" name="view" value="{{ active_view }}">
+          {% if active_category %}
+          <input type="hidden" name="category" value="{{ active_category }}">
+          {% endif %}
+          <span class="search-icon">🔍</span>
+          <input
+            type="search"
+            name="q"
+            value="{{ search_query }}"
+            class="ui-search-input"
+            placeholder="Search Arduino, T-square, books..."
+          >
+        </form>
+      </div>
+
+      {% if cards %}
+      <div class="items-grid">
+        {% for card in cards %}
+        <article class="ui-card">
+          <div>
+            <a href="{{ url_for('used_items_pages.item_details', item_id=card.id) }}" class="item-thumb-link">
+              {% if card.image_url %}
+              <div class="item-thumb has-photo">
+                <img src="{{ url_for('static', filename=card.image_url) }}" alt="{{ card.title }}">
+              </div>
+              {% else %}
+              <div class="item-thumb">
+                <span class="thumb-icon">{{ card.category_icon }}</span>
+                <span>{{ card.category }}</span>
+              </div>
+              {% endif %}
+            </a>
+
+            <div class="card-body">
+              <div class="card-header-row">
+                <span class="category-tag">{{ card.category }}</span>
+                {% if card.listing_type == 'free' %}
+                <span class="badge badge-free">{{ card.badge_text }}</span>
+                {% else %}
+                <span class="badge badge-sale">{{ card.badge_text }}</span>
+                {% endif %}
+              </div>
+
+              <h2 class="item-title">
+                <a href="{{ url_for('used_items_pages.item_details', item_id=card.id) }}">{{ card.title }}</a>
+              </h2>
+
+              <div class="item-meta">
+                <span>Condition: {{ card.condition }}</span>
+                <span>{{ card.department }}</span>
+              </div>
+
+              <div class="item-seller">
+                <span>👤 {{ card.seller_name }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-actions">
+            {% if not card.is_owner %}
+            <a href="{{ card.whatsapp_url }}" target="_blank" rel="noopener noreferrer" class="btn-whatsapp">
+              💬 WhatsApp
+            </a>
+            <form method="post" action="{{ url_for('used_items_pages.toggle_save', item_id=card.id) }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-icon-action {% if card.is_saved %}is-saved{% endif %}" title="{{ 'Unsave item' if card.is_saved else 'Save item' }}">
+                {{ '★' if card.is_saved else '☆' }}
+              </button>
+            </form>
+            {% endif %}
+
+            <a href="{{ url_for('used_items_pages.item_details', item_id=card.id) }}" class="btn-outline{% if card.is_owner %} btn-details-owner{% endif %}">
+              Details
+            </a>
+
+            {% if card.can_edit %}
+            <a href="{{ url_for('used_items_pages.edit_item', item_id=card.id) }}" class="btn-icon-action" title="Edit listing">
+              ✏️
+            </a>
+            {% endif %}
+
+            {% if card.can_delete %}
+            <form method="post" action="{{ url_for('used_items_pages.delete_item', item_id=card.id) }}" class="inline-form js-confirm-form" data-confirm="Delete this listing permanently?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-icon-action btn-danger-icon" title="Delete listing">🗑️</button>
+            </form>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="ui-empty-state">
+        <h3>No matching listings found</h3>
+        <p>Try clearing your filters or post a new used item for fellow students.</p>
+        <a href="{{ url_for('used_items_pages.create_item') }}" class="btn-primary-inline">+ Post an Item</a>
+      </div>
+      {% endif %}
+    </main>
+  </div>
+</div>
+{% endblock %}

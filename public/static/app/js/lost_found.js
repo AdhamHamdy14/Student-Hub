@@ -43,14 +43,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const anonCheck = document.getElementById("isAnonymousCheck");
   const previewText = document.getElementById("publisherPreviewText");
   if (anonCheck && previewText) {
-    const originalHtml = previewText.innerHTML;
-    anonCheck.addEventListener("change", () => {
-      if (anonCheck.checked) {
-        previewText.innerHTML = "Displayed as: <strong>Anonymous member</strong>";
-      } else {
-        previewText.innerHTML = originalHtml;
-      }
-    });
+    const userName = previewText.dataset.userName || "Student";
+    const renderPreview = () => {
+      previewText.textContent = "Displayed as: ";
+      const strong = document.createElement("strong");
+      strong.textContent = anonCheck.checked ? "Anonymous member" : userName;
+      previewText.appendChild(strong);
+    };
+    renderPreview();
+    anonCheck.addEventListener("change", renderPreview);
   }
 
   // 4. Photo file input label update

@@ -242,6 +242,12 @@ class UsedItem(db.Model):
         server_default=db.func.current_timestamp(),
     )
     image_url = db.Column(db.String(255), nullable=True)
+    is_anonymous = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
     price = db.Column(
         db.Numeric(8, 2),
         nullable=False,
