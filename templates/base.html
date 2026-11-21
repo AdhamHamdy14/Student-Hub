@@ -65,10 +65,6 @@
           <button class="logout-button" type="submit">Log out</button>
         </form>
       </div>
-      <a class="mobile-profile-option{% if request.endpoint.startswith('profile_pages.') %} active{% endif %}" href="{{ url_for('profile_pages.index') }}">
-        <svg aria-hidden="true"><use href="#user"/></svg>
-        <span><strong>Profile</strong><small>{{ g.current_user.name }} · {{ role_label(g.current_user.role) }}</small></span>
-      </a>
     </div>
   </header>
 

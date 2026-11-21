@@ -72,6 +72,18 @@ body {
   gap: 20px;
 }
 
+.legal-back {
+  align-self: flex-start;
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.legal-back:hover {
+  text-decoration: underline;
+}
+
 .legal-hero {
   border-radius: 18px;
   padding: 36px 40px;

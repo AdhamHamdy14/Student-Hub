@@ -34,6 +34,11 @@
   </header>
 
   <main class="legal-page">
+    <a
+      class="legal-back"
+      href="{{ url_for('home') if g.current_user else url_for('auth_pages.login') }}"
+      onclick="if (document.referrer && new URL(document.referrer).origin === window.location.origin) { history.back(); return false; }"
+    >&larr; Back</a>
     {% if page == "privacy" %}
       <section class="legal-hero">
         <span class="legal-kicker">Student Hub</span>

@@ -15,6 +15,7 @@ os.environ["DATABASE_URL"] = "sqlite://"
 from app import app
 from models import (
     Event,
+    EventReservation,
     Lab,
     LabSlot,
     PendingSignup,
@@ -316,15 +317,26 @@ class AuthenticationSessionTests(unittest.TestCase):
         self.assertIn(b'class="mobile-menu-toggle"', page.data)
         self.assertIn(b'id="primary-navigation"', page.data)
         self.assertIn(b'href="/home" class="nav-link active">Home</a>', page.data)
-        self.assertIn(b"Profile", page.data)
-        self.assertIn(b'href="/profile/"', page.data)
         self.assertIn(b'class="user-account-link" href="/profile/"', page.data)
+        self.assertNotIn(b"mobile-profile-option", page.data)
         self.assertIn(b"Test Student", page.data)
 
         script = client.get("/static/app/js/base.js")
         self.assertEqual(script.status_code, 200)
         self.assertIn(b"initializeMobileNavigation", script.data)
         script.close()
+
+    def test_legal_pages_have_a_back_link(self):
+        client = app.test_client()
+        self.login(client)
+
+        for path in ("/privacy-policy", "/terms-of-service", "/user-guide"):
+            with self.subTest(path=path):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'class="legal-back"', response.data)
+                self.assertIn(b'href="/home"', response.data)
+                self.assertIn(b"history.back()", response.data)
 
     def test_profile_updates_contact_details_and_rejects_duplicate_email(self):
         with app.app_context():
@@ -945,6 +957,20 @@ class AuthenticationSessionTests(unittest.TestCase):
                         capacity=1,
                         category="Seminar",
                     ),
+                    *[
+                        Profile(
+                            id=profile_id,
+                            name=f"Reserved Student {profile_id}",
+                            primary_email=f"reserved{profile_id}@example.com",
+                            password_hash="unused",
+                            department="Testing",
+                        )
+                        for profile_id in range(2, 6)
+                    ],
+                    *[
+                        EventReservation(profile_id=profile_id, event_id=1)
+                        for profile_id in range(2, 6)
+                    ],
                 ]
             )
             db.session.commit()
@@ -953,9 +979,17 @@ class AuthenticationSessionTests(unittest.TestCase):
         self.login(client)
         events_page = client.get("/events")
 
-        self.assertIn(b"class=\"spots-left-badge\">10 spots left", events_page.data)
+        self.assertIn(
+            b'class="status-badge status-spots-left">6 spots left',
+            events_page.data,
+        )
         self.assertIn(b"Capacity: <strong>11</strong> seats", events_page.data)
-        self.assertIn(b"class=\"spots-left-badge\">1 spot left", events_page.data)
+        self.assertIn(b"Capacity: <strong>10</strong> seats", events_page.data)
+        self.assertIn(b'class="status-badge status-open">Open</span>', events_page.data)
+        self.assertIn(
+            b'class="status-badge status-spots-left">1 spot left',
+            events_page.data,
+        )
 
     def test_student_can_star_and_unstar_event_from_events_list(self):
         with app.app_context():

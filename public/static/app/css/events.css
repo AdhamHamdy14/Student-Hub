@@ -138,6 +138,16 @@
   color: #15803D;
 }
 
+.status-registered {
+  background-color: #EFF6FF;
+  color: #1D4ED8;
+}
+
+.status-spots-left {
+  background-color: #FEF3C7;
+  color: #B45309;
+}
+
 .status-closed {
   background-color: #F3F4F6;
   color: #6B7280;
@@ -248,18 +258,6 @@
 .event-capacity {
   font-size: 13px;
   color: #6B7280;
-}
-
-.spots-left-badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 7px 14px;
-  background-color: #FEF3C7;
-  color: #B45309;
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
 }
 
 .btn-event-primary {
