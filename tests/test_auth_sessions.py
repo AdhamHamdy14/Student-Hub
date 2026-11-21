@@ -5,7 +5,7 @@ from datetime import date, time as time_of_day, timedelta
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -72,6 +72,105 @@ class AuthenticationSessionTests(unittest.TestCase):
             profile = db.session.get(Profile, 1)
             self.assertNotEqual(profile.password_hash, "password123")
             self.assertTrue(check_password_hash(profile.password_hash, "password123"))
+
+    def test_login_page_offers_outlook_and_student_signup_creates_student_account(self):
+        client = app.test_client()
+        login_page = client.get("/login")
+        self.assertIn(b"Continue with Outlook", login_page.data)
+
+        with client.session_transaction() as auth_session:
+            auth_session["microsoft_signup"] = {
+                "email": "new.student@alexu.edu.eg",
+                "name": "New Student",
+            }
+
+        signup_page = client.get("/signup/microsoft")
+        self.assertEqual(signup_page.status_code, 200)
+        with client.session_transaction() as auth_session:
+            csrf = auth_session["_csrf_token"]
+
+        response = client.post(
+            "/signup/microsoft",
+            data={
+                "_csrf_token": csrf,
+                "department": "CSE",
+                "student_id": "S12345",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/home")
+
+        with app.app_context():
+            user = Profile.query.filter_by(
+                primary_email="new.student@alexu.edu.eg"
+            ).one()
+            self.assertEqual(user.name, "New Student")
+            self.assertEqual(user.department, "CSE")
+            self.assertEqual(user.student_id, "S12345")
+            self.assertEqual(user.role, "student")
+
+    def test_microsoft_callback_rejects_accounts_outside_allowed_domain(self):
+        client = app.test_client()
+        microsoft_client = Mock()
+        microsoft_client.authorize_access_token.return_value = {
+            "userinfo": {
+                "email": "person@example.com",
+                "preferred_username": "person@other.edu",
+                "name": "University Student",
+            }
+        }
+
+        with patch.dict(
+            app.config,
+            {
+                "MICROSOFT_CLIENT_ID": "test-client-id",
+                "MICROSOFT_CLIENT_SECRET": "test-client-secret",
+                "MICROSOFT_EMAIL_DOMAIN": "alexu.edu.eg",
+            },
+        ), patch(
+            "routes.auth_pages.microsoft_oauth.create_client",
+            return_value=microsoft_client,
+        ):
+            response = client.get("/login/microsoft/callback")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/login")
+        with client.session_transaction() as auth_session:
+            self.assertNotIn("microsoft_signup", auth_session)
+
+    def test_microsoft_callback_signs_in_existing_university_account(self):
+        with app.app_context():
+            user = db.session.get(Profile, 1)
+            user.primary_email = "existing.student@alexu.edu.eg"
+            db.session.commit()
+
+        client = app.test_client()
+        microsoft_client = Mock()
+        microsoft_client.authorize_access_token.return_value = {
+            "userinfo": {
+                "email": "existing.student@alexu.edu.eg",
+                "name": "Existing Student",
+            }
+        }
+
+        with patch.dict(
+            app.config,
+            {
+                "MICROSOFT_CLIENT_ID": "test-client-id",
+                "MICROSOFT_CLIENT_SECRET": "test-client-secret",
+                "MICROSOFT_EMAIL_DOMAIN": "alexu.edu.eg",
+            },
+        ), patch(
+            "routes.auth_pages.microsoft_oauth.create_client",
+            return_value=microsoft_client,
+        ):
+            response = client.get("/login/microsoft/callback")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/home")
+        with client.session_transaction() as auth_session:
+            self.assertEqual(auth_session["profile_id"], 1)
+            self.assertTrue(auth_session["auth_token"])
 
     def test_second_login_invalidates_the_previous_device(self):
         first_device = app.test_client()
@@ -719,6 +818,55 @@ class AuthenticationSessionTests(unittest.TestCase):
             events_page.data.index(b'class="events-filters"'),
             events_page.data.index(b'id="eventSearchInput"'),
         )
+
+    def test_student_events_page_shows_low_seat_badges(self):
+        with app.app_context():
+            db.session.add_all(
+                [
+                    Event(
+                        id=1,
+                        event_name="Nearly Full Workshop",
+                        organizer="Engineering Society",
+                        location="Room 12",
+                        date=date.today() + timedelta(days=1),
+                        start_time=time_of_day(10),
+                        end_time=time_of_day(12),
+                        capacity=10,
+                        category="Workshop",
+                    ),
+                    Event(
+                        id=2,
+                        event_name="Open Seminar",
+                        organizer="Engineering Society",
+                        location="Room 13",
+                        date=date.today() + timedelta(days=2),
+                        start_time=time_of_day(10),
+                        end_time=time_of_day(12),
+                        capacity=11,
+                        category="Seminar",
+                    ),
+                    Event(
+                        id=3,
+                        event_name="Last Seat Talk",
+                        organizer="Engineering Society",
+                        location="Room 14",
+                        date=date.today() + timedelta(days=3),
+                        start_time=time_of_day(10),
+                        end_time=time_of_day(12),
+                        capacity=1,
+                        category="Seminar",
+                    ),
+                ]
+            )
+            db.session.commit()
+
+        client = app.test_client()
+        self.login(client)
+        events_page = client.get("/events")
+
+        self.assertIn(b"class=\"spots-left-badge\">10 spots left", events_page.data)
+        self.assertIn(b"Capacity: <strong>11</strong> seats", events_page.data)
+        self.assertIn(b"class=\"spots-left-badge\">1 spot left", events_page.data)
 
     def test_student_can_star_and_unstar_event_from_events_list(self):
         with app.app_context():

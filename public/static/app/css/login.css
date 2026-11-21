@@ -1,7 +1,7 @@
 .logo {
   display: block;
   width: 128px;
-  height: 182px;
+  height: 138px;
   margin: 0 auto;
 }
 
@@ -14,4 +14,67 @@
 .reset-link:hover {
   color: var(--primary);
   text-decoration: underline;
+}
+
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.oauth-divider::before,
+.oauth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+.oauth-button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.oauth-button:hover {
+  background: #f8fafc;
+  border-color: #b8bec9;
+}
+.oauth-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.oauth-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.field select {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: 400 14px/22px var(--font);
+}
+.field select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
+.field label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
 }

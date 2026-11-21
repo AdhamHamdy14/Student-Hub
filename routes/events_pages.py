@@ -1,4 +1,5 @@
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from models import Event, EventReservation, StarredEvent, db
@@ -19,6 +20,20 @@ def require_login():
 @events_pages.route("/events")
 def events():
     all_events = Event.query.order_by(Event.date.asc(), Event.start_time.asc()).all()
+    reserved_counts = dict(
+        db.session.query(
+            EventReservation.event_id,
+            func.count(EventReservation.id),
+        )
+        .filter(EventReservation.status != "cancelled")
+        .group_by(EventReservation.event_id)
+        .all()
+    )
+    seats_left_by_event_id = {
+        event.id: max(event.capacity - reserved_counts.get(event.id, 0), 0)
+        for event in all_events
+        if event.capacity is not None
+    }
 
     user_reservations = EventReservation.query.filter(
         EventReservation.profile_id == g.current_user.id,
@@ -34,6 +49,7 @@ def events():
         events=all_events,
         registered_event_ids=registered_event_ids,
         starred_event_ids=starred_event_ids,
+        seats_left_by_event_id=seats_left_by_event_id,
     )
 
 

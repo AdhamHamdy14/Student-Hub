@@ -4,6 +4,8 @@ from datetime import timedelta
 from functools import wraps
 from hmac import compare_digest
 
+from authlib.integrations.base_client.errors import OAuthError
+from authlib.integrations.flask_client import OAuth
 from flask import (
     Blueprint,
     abort,
@@ -16,6 +18,8 @@ from flask import (
     session,
     url_for,
 )
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import PasswordReset, Profile, db, utc_now
@@ -24,13 +28,64 @@ from services.password_reset_email import (
     send_password_reset_email,
 )
 from services.passwords import password_meets_policy
-from services.roles import ROLE_VALUES
+from services.roles import FOE_DEPARTMENTS, ROLE_VALUES, STUDENT_ROLE
 
 auth_pages = Blueprint("auth_pages", __name__)
+microsoft_oauth = OAuth()
 LOGIN_MAX_FAILED_ATTEMPTS = 5
 LOGIN_LOCKOUT_DURATION = timedelta(minutes=15)
 PASSWORD_RESET_LIFETIME = timedelta(minutes=15)
 PASSWORD_RESET_MAX_ATTEMPTS = 5
+
+
+def configure_microsoft_oauth(app):
+    microsoft_oauth.init_app(app)
+    client_id = app.config.get("MICROSOFT_CLIENT_ID")
+    client_secret = app.config.get("MICROSOFT_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return
+
+    tenant_id = app.config.get("MICROSOFT_TENANT_ID", "organizations")
+    microsoft_oauth.register(
+        name="microsoft",
+        client_id=client_id,
+        client_secret=client_secret,
+        server_metadata_url=(
+            f"https://login.microsoftonline.com/{tenant_id}/v2.0/"
+            ".well-known/openid-configuration"
+        ),
+        client_kwargs={"scope": "openid profile email"},
+    )
+
+
+def _email_uses_allowed_domain(email):
+    if not isinstance(email, str) or email.count("@") != 1:
+        return False
+    address, domain = email.strip().lower().rsplit("@", 1)
+    allowed_domain = current_app.config.get("MICROSOFT_EMAIL_DOMAIN", "")
+    return bool(address) and bool(allowed_domain) and domain == allowed_domain
+
+
+def _establish_session(user):
+    auth_token = secrets.token_urlsafe(32)
+    user.tokens = auth_token
+    user.failed_login_attempts = 0
+    user.login_locked_until = None
+    db.session.commit()
+
+    session.clear()
+    session.permanent = True
+    session["profile_id"] = user.id
+    session["auth_token"] = auth_token
+    session["auth_last_activity"] = time.time()
+
+
+def _microsoft_client():
+    if not current_app.config.get("MICROSOFT_CLIENT_ID") or not current_app.config.get(
+        "MICROSOFT_CLIENT_SECRET"
+    ):
+        return None
+    return microsoft_oauth.create_client("microsoft")
 
 
 def _issue_password_reset(user):
@@ -125,18 +180,153 @@ def login():
             flash("This account has an unsupported role.", "error")
             return redirect(url_for("auth_pages.login"))
 
-        auth_token = secrets.token_urlsafe(32)
-        user.tokens = auth_token
-        db.session.commit()
-
-        session.clear()
-        session.permanent = True
-        session["profile_id"] = user.id
-        session["auth_token"] = auth_token
-        session["auth_last_activity"] = time.time()
+        _establish_session(user)
         return redirect(url_for("home"))
 
     return render_template("auth/login.html")
+
+
+@auth_pages.get("/login/microsoft")
+def microsoft_login():
+    client = _microsoft_client()
+    if client is None:
+        flash("Microsoft sign-in is not configured yet.", "error")
+        return redirect(url_for("auth_pages.login"))
+
+    redirect_uri = current_app.config.get("MICROSOFT_REDIRECT_URI") or url_for(
+        "auth_pages.microsoft_callback", _external=True
+    )
+    return client.authorize_redirect(redirect_uri)
+
+
+@auth_pages.get("/login/microsoft/callback")
+def microsoft_callback():
+    client = _microsoft_client()
+    if client is None:
+        flash("Microsoft sign-in is not configured yet.", "error")
+        return redirect(url_for("auth_pages.login"))
+
+    try:
+        token = client.authorize_access_token()
+    except OAuthError as error:
+        current_app.logger.warning("Microsoft sign-in failed: %s", error.error)
+        flash("Microsoft sign-in could not be completed. Please try again.", "error")
+        return redirect(url_for("auth_pages.login"))
+
+    identity = token.get("userinfo")
+    email = (
+        next(
+            (
+                candidate.strip().lower()
+                for candidate in (
+                    identity.get("email"),
+                    identity.get("preferred_username"),
+                )
+                if isinstance(candidate, str)
+                and _email_uses_allowed_domain(candidate)
+            ),
+            None,
+        )
+        if identity
+        else None
+    )
+    name = identity.get("name") if identity else None
+    if not _email_uses_allowed_domain(email):
+        flash("Use your university Microsoft account to continue.", "error")
+        return redirect(url_for("auth_pages.login"))
+
+    email = email.strip().lower()
+    user = Profile.query.filter(func.lower(Profile.primary_email) == email).first()
+    if user:
+        if user.role not in ROLE_VALUES:
+            flash("This account has an unsupported role.", "error")
+            return redirect(url_for("auth_pages.login"))
+        _establish_session(user)
+        return redirect(url_for("home"))
+
+    session["microsoft_signup"] = {
+        "email": email,
+        "name": (
+            name.strip()
+            if isinstance(name, str) and name.strip()
+            else email.split("@", 1)[0]
+        ),
+    }
+    return redirect(url_for("auth_pages.microsoft_signup"))
+
+
+@auth_pages.route("/signup/microsoft", methods=["GET", "POST"])
+def microsoft_signup():
+    identity = session.get("microsoft_signup")
+    if (
+        not isinstance(identity, dict)
+        or not _email_uses_allowed_domain(identity.get("email"))
+        or not isinstance(identity.get("name"), str)
+    ):
+        session.pop("microsoft_signup", None)
+        flash("Continue with your university Microsoft account to sign up.", "error")
+        return redirect(url_for("auth_pages.login"))
+
+    email = identity["email"].strip().lower()
+    name = identity["name"].strip()
+    if request.method == "POST":
+        expected_csrf_token = session.get("_csrf_token")
+        submitted_csrf_token = request.form.get("_csrf_token")
+        if (
+            not isinstance(expected_csrf_token, str)
+            or not isinstance(submitted_csrf_token, str)
+            or not compare_digest(expected_csrf_token, submitted_csrf_token)
+        ):
+            abort(400)
+
+        department = request.form.get("department", "")
+        student_id = request.form.get("student_id", "").strip() or None
+        valid_departments = {code for code, _ in FOE_DEPARTMENTS}
+
+        if department not in valid_departments:
+            flash("Choose a valid department.", "error")
+            return redirect(url_for("auth_pages.microsoft_signup"))
+        if student_id is not None and len(student_id) > 255:
+            flash("University ID must be 255 characters or fewer.", "error")
+            return redirect(url_for("auth_pages.microsoft_signup"))
+        if student_id and Profile.query.filter_by(student_id=student_id).first():
+            flash("An account with that University ID already exists.", "error")
+            return redirect(url_for("auth_pages.microsoft_signup"))
+
+        user = Profile.query.filter(func.lower(Profile.primary_email) == email).first()
+        if user is None:
+            user = Profile(
+                name=name[:255],
+                primary_email=email,
+                password_hash=generate_password_hash(secrets.token_urlsafe(32)),
+                role=STUDENT_ROLE,
+                student_id=student_id,
+                department=department,
+            )
+            db.session.add(user)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                if Profile.query.filter(func.lower(Profile.primary_email) == email).first():
+                    flash("An account with this email already exists. Sign in with Outlook.", "error")
+                    return redirect(url_for("auth_pages.login"))
+                if student_id and Profile.query.filter_by(student_id=student_id).first():
+                    flash("An account with that University ID already exists.", "error")
+                    return redirect(url_for("auth_pages.microsoft_signup"))
+                raise
+        elif user.role not in ROLE_VALUES:
+            flash("This account has an unsupported role.", "error")
+            return redirect(url_for("auth_pages.login"))
+
+        _establish_session(user)
+        return redirect(url_for("home"))
+
+    return render_template(
+        "auth/microsoft_signup.html",
+        identity=identity,
+        departments=FOE_DEPARTMENTS,
+    )
 
 
 @auth_pages.post("/logout")

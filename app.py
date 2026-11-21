@@ -10,16 +10,16 @@ from sqlalchemy import text
 
 from models import Profile, db
 from routes.admin_roles_pages import admin_roles_pages
-from routes.auth_pages import auth_pages
+from routes.auth_pages import auth_pages, configure_microsoft_oauth
 from routes.event_management_pages import event_management_pages
 from routes.events_pages import events_pages
+from routes.home_pages import home_pages
 from routes.labs_pages import labs_pages
+from routes.lost_found_pages import lost_found_pages
 from routes.profile_pages import profile_pages
+from routes.used_items_pages import used_items_pages
 from services.csrf import csrf_token
 from services.roles import ADMIN_ROLE, EVENT_MANAGER_ROLE, role_label
-from routes.home_pages import home_pages
-from routes.lost_found_pages import lost_found_pages
-from routes.used_items_pages import used_items_pages
 
 load_dotenv()
 
@@ -32,6 +32,13 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 app.config["MAIL_EMAIL"] = os.getenv("MAIL_EMAIL")
 app.config["MAIL_APP_PASSWORD"] = os.getenv("MAIL_APP_PASSWORD")
+app.config["MICROSOFT_CLIENT_ID"] = os.getenv("MICROSOFT_CLIENT_ID")
+app.config["MICROSOFT_CLIENT_SECRET"] = os.getenv("MICROSOFT_CLIENT_SECRET")
+app.config["MICROSOFT_TENANT_ID"] = os.getenv("MICROSOFT_TENANT_ID", "organizations")
+app.config["MICROSOFT_EMAIL_DOMAIN"] = os.getenv(
+    "MICROSOFT_EMAIL_DOMAIN", "alexu.edu.eg"
+).strip().lower().lstrip("@")
+app.config["MICROSOFT_REDIRECT_URI"] = os.getenv("MICROSOFT_REDIRECT_URI")
 
 database_url = os.getenv("DATABASE_URL")
 if database_url and database_url.startswith("postgresql://"):
@@ -39,7 +46,13 @@ if database_url and database_url.startswith("postgresql://"):
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+    "connect_args": {"prepare_threshold": None},
+}
 
+configure_microsoft_oauth(app)
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -127,6 +140,21 @@ app.add_url_rule("/home", endpoint="home", view_func=app.view_functions["home_pa
 def health_check():
     db.session.execute(text("SELECT 1"))
     return {"status": "connected"}
+
+
+@app.route("/privacy-policy")
+def privacy_policy():
+    return render_template("legal.html", page="privacy")
+
+
+@app.route("/user-guide")
+def user_guide():
+    return render_template("legal.html", page="guide")
+
+
+@app.route("/terms-of-service")
+def terms_of_service():
+    return render_template("legal.html", page="terms")
 
 
 if __name__ == "__main__":

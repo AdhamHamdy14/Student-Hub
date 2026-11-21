@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {% if page == "privacy" %}
+    <title>Privacy &amp; Policy - Student Hub</title>
+  {% elif page == "guide" %}
+    <title>User Guide - Student Hub</title>
+  {% else %}
+    <title>Terms of Service - Student Hub</title>
+  {% endif %}
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo1.png') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app/css/legal.css') }}">
+</head>
+<body>
+  <header class="legal-navbar">
+    {% if g.current_user %}
+      <a class="legal-brand" href="{{ url_for('home') }}">
+    {% else %}
+      <a class="legal-brand" href="{{ url_for('auth_pages.login') }}">
+    {% endif %}
+      <img src="{{ url_for('static', filename='images/logo1.png') }}" alt="Student Hub Logo">
+      <span>Student Hub</span>
+    </a>
+    <nav class="legal-nav" aria-label="Legal pages">
+      <a href="{{ url_for('privacy_policy') }}"{% if page == "privacy" %} class="active"{% endif %}>Privacy &amp; Policy</a>
+      <a href="{{ url_for('user_guide') }}"{% if page == "guide" %} class="active"{% endif %}>User Guide</a>
+      <a href="{{ url_for('terms_of_service') }}"{% if page == "terms" %} class="active"{% endif %}>Terms of Service</a>
+    </nav>
+  </header>
+
+  <main class="legal-page">
+    {% if page == "privacy" %}
+      <section class="legal-hero">
+        <span class="legal-kicker">Student Hub</span>
+        <h1>Privacy &amp; Policy</h1>
+        <p>How Student Hub collects, uses, and protects information used to support campus services.</p>
+      </section>
+      <article class="legal-card">
+        <section>
+          <h2>Information we collect</h2>
+          <p>We store the account and profile information you provide, such as your name, university email, phone number, profile photo, role, and optional secondary email. Activity information may include lab reservations, event registrations, used-item listings, lost-and-found reports, and notifications.</p>
+        </section>
+        <section>
+          <h2>How information is used</h2>
+          <p>Information is used to operate Student Hub features, identify users, manage reservations and listings, send relevant notifications, and maintain campus records. We do not sell personal information.</p>
+        </section>
+        <section>
+          <h2>Visibility and sharing</h2>
+          <p>Only authorized Student Hub users and administrators can access information needed for their role. Public listings may show permitted profile details or an anonymous label when anonymity is selected. Security-sensitive account information should not be published in listings or reports.</p>
+        </section>
+        <section>
+          <h2>Security and retention</h2>
+          <p>Passwords are stored securely, and account sessions expire after inactivity. Users are responsible for keeping account credentials confidential. Information is retained while needed for an account or campus service and removed when no longer required, subject to administrative requirements.</p>
+        </section>
+        <section>
+          <h2>Your choices</h2>
+          <p>You can update permitted profile details, manage submitted listings, and log out from Student Hub. Contact the faculty administration if you need assistance reviewing or removing an account record.</p>
+        </section>
+      </article>
+
+    {% elif page == "guide" %}
+      <section class="legal-hero">
+        <span class="legal-kicker">Getting started</span>
+        <h1>User Guide</h1>
+        <p>A quick guide to reservations, events, listings, and account tools in Student Hub.</p>
+      </section>
+      <article class="legal-card">
+        <section>
+          <h2>Set up your profile</h2>
+          <p>Open Profile from the account menu to review or update your name, contact details, and profile photo. Keep your information accurate so service managers can identify your reservations and reports.</p>
+        </section>
+        <section>
+          <h2>Reserve a lab</h2>
+          <p>Open Labs, choose an available lab, and select an open slot. Review the date and time before confirming. You can view or cancel eligible reservations from the saved labs area.</p>
+        </section>
+        <section>
+          <h2>Browse and register for events</h2>
+          <p>Use Events to view campus activities, open event details, and register when registration is available. Saved and registered events can be reached from their corresponding event views.</p>
+        </section>
+        <section>
+          <h2>Post or find items</h2>
+          <p>Use Used Items to offer an item to other students or browse active listings. Use Lost &amp; Found to report an item or search reported items. Choose anonymous publishing only when it is appropriate for the listing.</p>
+        </section>
+        <section>
+          <h2>Stay informed</h2>
+          <p>Notifications on the home dashboard show updates relevant to your account. Mark notifications as read after reviewing them, and log out after using a shared device.</p>
+        </section>
+      </article>
+
+    {% else %}
+      <section class="legal-hero">
+        <span class="legal-kicker">Student Hub</span>
+        <h1>Terms of Service</h1>
+        <p>Rules for using Student Hub and the campus services available through it.</p>
+      </section>
+      <article class="legal-card">
+        <section>
+          <h2>Use of the platform</h2>
+          <p>Student Hub is provided for Faculty of Engineering students and authorized staff to access campus labs, events, used-item exchanges, and lost-and-found services. You must provide accurate information and use the platform for legitimate academic or campus purposes.</p>
+        </section>
+        <section>
+          <h2>Account responsibility</h2>
+          <p>You are responsible for activity under your account and for protecting your login credentials. Do not attempt to access another person's account or bypass permissions. Administrators may suspend access that threatens platform security or service operations.</p>
+        </section>
+        <section>
+          <h2>Listings and conduct</h2>
+          <p>Listings and reports must be truthful, relevant, and lawful. Do not post offensive, fraudulent, unsafe, or unrelated content. Event and lab reservations must be cancelled when no longer needed so that other users can use the service.</p>
+        </section>
+        <section>
+          <h2>Service availability</h2>
+          <p>Availability of listings, lab slots, events, and other services is managed by the relevant campus staff. Student Hub may be unavailable temporarily for maintenance, security, or system issues.</p>
+        </section>
+        <section>
+          <h2>Updates to these terms</h2>
+          <p>These terms may be updated as Student Hub changes. Continued use after an update means you accept the current terms. Review this page periodically for important changes.</p>
+        </section>
+      </article>
+    {% endif %}
+  </main>
+
+  <footer class="legal-footer">
+    <span>© 2026 Student Hub. All rights reserved.</span>
+  </footer>
+</body>
+</html>

@@ -86,7 +86,12 @@
       </div>
 
       <div class="event-card-footer">
-        <span class="event-capacity">Capacity: <strong>{{ event.capacity }}</strong> seats</span>
+        {% if event.capacity is not none and seats_left_by_event_id[event.id] <= 10 %}
+          {% set seats_left = seats_left_by_event_id[event.id] %}
+          <span class="spots-left-badge">{{ seats_left }} spot{{ '' if seats_left == 1 else 's' }} left</span>
+        {% else %}
+          <span class="event-capacity">Capacity: <strong>{{ event.capacity or 'Unlimited' }}</strong>{% if event.capacity is not none %} seats{% endif %}</span>
+        {% endif %}
         <div class="event-actions">
           {% set is_starred = event.id in starred_event_ids %}
           <form

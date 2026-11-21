@@ -26,11 +26,11 @@
       {% block auth_content %}{% endblock %}
 
       <nav class="legal" aria-label="Legal and help">
-        <a href="#">Privacy &amp; Policy</a>
+        <a href="{{ url_for('privacy_policy') }}">Privacy &amp; Policy</a>
         <span aria-hidden="true">-</span>
-        <a href="#">User guide</a>
+        <a href="{{ url_for('user_guide') }}">User guide</a>
         <span aria-hidden="true">-</span>
-        <a href="#">Terms of services</a>
+        <a href="{{ url_for('terms_of_service') }}">Terms of services</a>
       </nav>
     </section>
   </main>
