@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 from flask_migrate import Migrate
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 
 from models import Profile, db
 from routes.admin_roles_pages import admin_roles_pages
@@ -46,11 +47,17 @@ if database_url and database_url.startswith("postgresql://"):
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_pre_ping": True,
-    "pool_recycle": 300,
-    "connect_args": {"prepare_threshold": None},
-}
+database_config = make_url(database_url) if database_url else None
+if (
+    database_config
+    and database_config.get_backend_name() == "postgresql"
+    and database_config.port == 6543
+):
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "connect_args": {"prepare_threshold": None},
+    }
 
 configure_microsoft_oauth(app)
 db.init_app(app)
