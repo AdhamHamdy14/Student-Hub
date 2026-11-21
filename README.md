@@ -24,22 +24,14 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 Put the generated value in `.env` as `SECRET_KEY=<generated-value>`. Keep it
 private and stable across deployments; changing it signs out existing sessions.
 
-For password-reset emails, set `MAIL_EMAIL` to a Gmail or Outlook sender account
-and `MAIL_APP_PASSWORD` to that account's app password. Gmail addresses use
-Gmail SMTP and Outlook, Hotmail, Live, and MSN addresses use Outlook SMTP.
-Both providers use STARTTLS, and SMTP AUTH must be enabled for the sender account.
-
-Microsoft sign-in and student sign-up use Microsoft Entra ID. Register a Web
-application and add `http://127.0.0.1:5000/login/microsoft/callback` as a
-redirect URI (use the corresponding HTTPS URL in production). Set
-`MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` in `.env`, and set
-`MICROSOFT_EMAIL_DOMAIN` to the university email domain (defaults to
-`alexu.edu.eg`). `MICROSOFT_TENANT_ID` defaults to `organizations`; you can set
-it to the university tenant ID to limit the Microsoft sign-in authority.
-Optionally set `MICROSOFT_REDIRECT_URI` when the automatically generated
-callback URL does not match the registered URI. New users complete a profile
-with their department and optional University ID and are assigned the student
-role.
+For student sign-up verification and password-reset emails, set `MAIL_EMAIL` to
+a Gmail or Outlook sender account and `MAIL_APP_PASSWORD` to that account's app
+password. Gmail addresses use Gmail SMTP and Outlook, Hotmail, Live, and MSN
+addresses use Outlook SMTP. Both providers use STARTTLS, and SMTP AUTH must be
+enabled for the sender account. Student registration requires an
+`@alexu.edu.eg` address and a 6-digit email code; the account is created only
+after the code is verified. Signup codes expire after 15 minutes and allow up
+to five attempts.
 
 Authenticated sessions use a per-login token, allow only one active device per
 account (a new login invalidates the previous device), and expire after one

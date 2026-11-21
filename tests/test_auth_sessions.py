@@ -5,7 +5,7 @@ from datetime import date, time as time_of_day, timedelta
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -17,6 +17,7 @@ from models import (
     Event,
     Lab,
     LabSlot,
+    PendingSignup,
     PasswordReset,
     Profile,
     StarredEvent,
@@ -67,35 +68,58 @@ class AuthenticationSessionTests(unittest.TestCase):
             data={"email": email, "password": password},
         )
 
+    @staticmethod
+    def csrf_token(client, path):
+        client.get(path)
+        with client.session_transaction() as auth_session:
+            return auth_session["_csrf_token"]
+
     def test_password_is_stored_as_a_hash(self):
         with app.app_context():
             profile = db.session.get(Profile, 1)
             self.assertNotEqual(profile.password_hash, "password123")
             self.assertTrue(check_password_hash(profile.password_hash, "password123"))
 
-    def test_login_page_offers_outlook_and_student_signup_creates_student_account(self):
+    def test_signup_verifies_email_before_creating_student_account(self):
         client = app.test_client()
         login_page = client.get("/login")
-        self.assertIn(b"Continue with Outlook", login_page.data)
+        self.assertNotIn(b"Continue with Outlook", login_page.data)
+        self.assertIn(b"Sign up", login_page.data)
 
-        with client.session_transaction() as auth_session:
-            auth_session["microsoft_signup"] = {
-                "email": "new.student@alexu.edu.eg",
-                "name": "New Student",
-            }
-
-        signup_page = client.get("/signup/microsoft")
+        signup_page = client.get("/signup")
         self.assertEqual(signup_page.status_code, 200)
-        with client.session_transaction() as auth_session:
-            csrf = auth_session["_csrf_token"]
+        csrf = self.csrf_token(client, "/signup")
+        signup_data = {
+            "_csrf_token": csrf,
+            "name": "New Student",
+            "email": "new.student@alexu.edu.eg",
+            "password": "Student123!",
+            "department": "CSE",
+            "student_id": "S12345",
+        }
+        with patch("routes.auth_pages.send_signup_verification_email") as send_email:
+            response = client.post("/signup", data=signup_data)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/signup/verify")
+        recipient, otp = send_email.call_args.args
+        self.assertEqual(recipient, "new.student@alexu.edu.eg")
+        self.assertEqual(len(otp), 6)
+
+        with app.app_context():
+            self.assertIsNone(
+                Profile.query.filter_by(
+                    primary_email="new.student@alexu.edu.eg"
+                ).first()
+            )
+            pending = PendingSignup.query.filter_by(
+                email="new.student@alexu.edu.eg"
+            ).one()
+            self.assertTrue(check_password_hash(pending.code_hash, otp))
+            self.assertTrue(check_password_hash(pending.password_hash, "Student123!"))
 
         response = client.post(
-            "/signup/microsoft",
-            data={
-                "_csrf_token": csrf,
-                "department": "CSE",
-                "student_id": "S12345",
-            },
+            "/signup/verify",
+            data={"_csrf_token": csrf, "digits": list(otp)},
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/home")
@@ -108,69 +132,134 @@ class AuthenticationSessionTests(unittest.TestCase):
             self.assertEqual(user.department, "CSE")
             self.assertEqual(user.student_id, "S12345")
             self.assertEqual(user.role, "student")
+            self.assertFalse(PendingSignup.query.filter_by(email=user.primary_email).first())
 
-    def test_microsoft_callback_rejects_accounts_outside_allowed_domain(self):
+    def test_signup_rejects_non_university_email_and_invalid_department(self):
         client = app.test_client()
-        microsoft_client = Mock()
-        microsoft_client.authorize_access_token.return_value = {
-            "userinfo": {
-                "email": "person@example.com",
-                "preferred_username": "person@other.edu",
-                "name": "University Student",
-            }
+        csrf = self.csrf_token(client, "/signup")
+        data = {
+            "_csrf_token": csrf,
+            "name": "New Student",
+            "email": "student@example.com",
+            "password": "Student123!",
+            "department": "CSE",
+            "student_id": "S12345",
         }
 
-        with patch.dict(
-            app.config,
-            {
-                "MICROSOFT_CLIENT_ID": "test-client-id",
-                "MICROSOFT_CLIENT_SECRET": "test-client-secret",
-                "MICROSOFT_EMAIL_DOMAIN": "alexu.edu.eg",
-            },
-        ), patch(
-            "routes.auth_pages.microsoft_oauth.create_client",
-            return_value=microsoft_client,
-        ):
-            response = client.get("/login/microsoft/callback")
-
+        response = client.post("/signup", data=data)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/login")
-        with client.session_transaction() as auth_session:
-            self.assertNotIn("microsoft_signup", auth_session)
+        self.assertEqual(response.location, "/signup")
+        self.assertIn(
+            b"Use a valid email ending in @alexu.edu.eg",
+            client.get("/signup", follow_redirects=True).data,
+        )
 
-    def test_microsoft_callback_signs_in_existing_university_account(self):
+        data["email"] = "student@alexu.edu.eg"
+        data["department"] = "not-a-department"
+        with patch("routes.auth_pages.send_signup_verification_email") as send_email:
+            response = client.post("/signup", data=data)
+        self.assertEqual(response.status_code, 302)
+        send_email.assert_not_called()
         with app.app_context():
-            user = db.session.get(Profile, 1)
-            user.primary_email = "existing.student@alexu.edu.eg"
-            db.session.commit()
+            self.assertEqual(PendingSignup.query.count(), 0)
 
+    def test_signup_otp_can_be_resent_after_the_cooldown(self):
         client = app.test_client()
-        microsoft_client = Mock()
-        microsoft_client.authorize_access_token.return_value = {
-            "userinfo": {
-                "email": "existing.student@alexu.edu.eg",
-                "name": "Existing Student",
-            }
-        }
-
-        with patch.dict(
-            app.config,
-            {
-                "MICROSOFT_CLIENT_ID": "test-client-id",
-                "MICROSOFT_CLIENT_SECRET": "test-client-secret",
-                "MICROSOFT_EMAIL_DOMAIN": "alexu.edu.eg",
-            },
-        ), patch(
-            "routes.auth_pages.microsoft_oauth.create_client",
-            return_value=microsoft_client,
+        csrf = self.csrf_token(client, "/signup")
+        with (
+            patch("routes.auth_pages.send_signup_verification_email") as send_email,
+            patch(
+                "routes.auth_pages.secrets.randbelow",
+                side_effect=[123456, 654321],
+            ),
         ):
-            response = client.get("/login/microsoft/callback")
+            client.post(
+                "/signup",
+                data={
+                    "_csrf_token": csrf,
+                    "name": "New Student",
+                    "email": "new.student@alexu.edu.eg",
+                    "password": "Student123!",
+                    "department": "CSE",
+                    "student_id": "S12345",
+                },
+            )
+            first_code = send_email.call_args.args[1]
+
+            with app.app_context():
+                pending = PendingSignup.query.filter_by(
+                    email="new.student@alexu.edu.eg"
+                ).one()
+                pending.requested_at = utc_now() - timedelta(minutes=2)
+                pending.attempts = 3
+                db.session.commit()
+
+            response = client.post(
+                "/signup/resend-otp",
+                data={"_csrf_token": csrf},
+            )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/home")
-        with client.session_transaction() as auth_session:
-            self.assertEqual(auth_session["profile_id"], 1)
-            self.assertTrue(auth_session["auth_token"])
+        self.assertEqual(response.location, "/signup/verify")
+        self.assertEqual(send_email.call_count, 2)
+        second_code = send_email.call_args.args[1]
+        self.assertNotEqual(first_code, second_code)
+        with app.app_context():
+            pending = PendingSignup.query.filter_by(
+                email="new.student@alexu.edu.eg"
+            ).one()
+            self.assertEqual(pending.attempts, 0)
+            self.assertTrue(check_password_hash(pending.code_hash, second_code))
+
+    def test_signup_requires_csrf_and_limits_otp_attempts(self):
+        client = app.test_client()
+        self.assertEqual(
+            client.post(
+                "/signup",
+                data={
+                    "name": "New Student",
+                    "email": "new.student@alexu.edu.eg",
+                    "password": "Student123!",
+                    "department": "CSE",
+                    "student_id": "S12345",
+                },
+            ).status_code,
+            400,
+        )
+
+        csrf = self.csrf_token(client, "/signup")
+        with patch("routes.auth_pages.send_signup_verification_email") as send_email:
+            client.post(
+                "/signup",
+                data={
+                    "_csrf_token": csrf,
+                    "name": "New Student",
+                    "email": "new.student@alexu.edu.eg",
+                    "password": "Student123!",
+                    "department": "CSE",
+                    "student_id": "S12345",
+                },
+            )
+        otp = send_email.call_args.args[1]
+        wrong_code = "000000" if otp != "000000" else "000001"
+
+        for _ in range(5):
+            response = client.post(
+                "/signup/verify",
+                data={"_csrf_token": csrf, "digits": list(wrong_code)},
+            )
+            self.assertEqual(response.status_code, 302)
+
+        with app.app_context():
+            pending = PendingSignup.query.filter_by(
+                email="new.student@alexu.edu.eg"
+            ).one()
+            self.assertEqual(pending.attempts, 5)
+            self.assertIsNone(
+                Profile.query.filter_by(
+                    primary_email="new.student@alexu.edu.eg"
+                ).first()
+            )
 
     def test_second_login_invalidates_the_previous_device(self):
         first_device = app.test_client()

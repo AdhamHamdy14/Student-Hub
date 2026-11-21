@@ -14,7 +14,7 @@ class PasswordResetEmailError(Exception):
     pass
 
 
-def send_password_reset_email(recipient, code):
+def _send_verification_email(recipient, code, purpose):
     sender = current_app.config.get("MAIL_EMAIL")
     password = current_app.config.get("MAIL_APP_PASSWORD")
     if not isinstance(sender, str) or not sender.strip() or not isinstance(password, str) or not password:
@@ -33,15 +33,23 @@ def send_password_reset_email(recipient, code):
         provider_name = "Outlook"
 
     message = EmailMessage()
-    message["Subject"] = "Student Hub password reset code"
+    if purpose == "signup":
+        message["Subject"] = "Verify your Student Hub account"
+        plain_body = (
+            f"Your Student Hub verification code is {code}. "
+            "It expires in 15 minutes. Do not share this code."
+        )
+    else:
+        message["Subject"] = "Student Hub password reset code"
+        plain_body = (
+            f"Your Student Hub password reset code is {code}. "
+            "It expires in 15 minutes. Do not share this code."
+        )
     message["From"] = sender.strip()
     message["To"] = recipient
-    message.set_content(
-        f"Your Student Hub password reset code is {code}. "
-        "It expires in 15 minutes. Do not share this code."
-    )
+    message.set_content(plain_body)
     message.add_alternative(
-        render_template("auth/email.html", code=code),
+        render_template("auth/email.html", code=code, purpose=purpose),
         subtype="html",
     )
 
@@ -54,3 +62,11 @@ def send_password_reset_email(recipient, code):
             smtp.send_message(message)
     except (OSError, smtplib.SMTPException) as error:
         raise PasswordResetEmailError(f"{provider_name} SMTP delivery failed.") from error
+
+
+def send_password_reset_email(recipient, code):
+    _send_verification_email(recipient, code, "password_reset")
+
+
+def send_signup_verification_email(recipient, code):
+    _send_verification_email(recipient, code, "signup")

@@ -11,7 +11,7 @@ from sqlalchemy.engine import make_url
 
 from models import Profile, db
 from routes.admin_roles_pages import admin_roles_pages
-from routes.auth_pages import auth_pages, configure_microsoft_oauth
+from routes.auth_pages import auth_pages
 from routes.event_management_pages import event_management_pages
 from routes.events_pages import events_pages
 from routes.home_pages import home_pages
@@ -33,14 +33,6 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=1)
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 app.config["MAIL_EMAIL"] = os.getenv("MAIL_EMAIL")
 app.config["MAIL_APP_PASSWORD"] = os.getenv("MAIL_APP_PASSWORD")
-app.config["MICROSOFT_CLIENT_ID"] = os.getenv("MICROSOFT_CLIENT_ID")
-app.config["MICROSOFT_CLIENT_SECRET"] = os.getenv("MICROSOFT_CLIENT_SECRET")
-app.config["MICROSOFT_TENANT_ID"] = os.getenv("MICROSOFT_TENANT_ID", "organizations")
-app.config["MICROSOFT_EMAIL_DOMAIN"] = os.getenv(
-    "MICROSOFT_EMAIL_DOMAIN", "alexu.edu.eg"
-).strip().lower().lstrip("@")
-app.config["MICROSOFT_REDIRECT_URI"] = os.getenv("MICROSOFT_REDIRECT_URI")
-
 database_url = os.getenv("DATABASE_URL")
 if database_url and database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
@@ -59,7 +51,6 @@ if (
         "connect_args": {"prepare_threshold": None},
     }
 
-configure_microsoft_oauth(app)
 db.init_app(app)
 migrate = Migrate(app, db)
 

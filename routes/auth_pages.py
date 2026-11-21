@@ -1,11 +1,10 @@
+import re
 import secrets
 import time
 from datetime import timedelta
 from functools import wraps
 from hmac import compare_digest
 
-from authlib.integrations.base_client.errors import OAuthError
-from authlib.integrations.flask_client import OAuth
 from flask import (
     Blueprint,
     abort,
@@ -22,48 +21,25 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import PasswordReset, Profile, db, utc_now
+from models import PendingSignup, PasswordReset, Profile, db, utc_now
+from services.csrf import csrf_protect
 from services.password_reset_email import (
     PasswordResetEmailError,
     send_password_reset_email,
+    send_signup_verification_email,
 )
 from services.passwords import password_meets_policy
 from services.roles import FOE_DEPARTMENTS, ROLE_VALUES, STUDENT_ROLE
 
 auth_pages = Blueprint("auth_pages", __name__)
-microsoft_oauth = OAuth()
 LOGIN_MAX_FAILED_ATTEMPTS = 5
 LOGIN_LOCKOUT_DURATION = timedelta(minutes=15)
 PASSWORD_RESET_LIFETIME = timedelta(minutes=15)
 PASSWORD_RESET_MAX_ATTEMPTS = 5
-
-
-def configure_microsoft_oauth(app):
-    microsoft_oauth.init_app(app)
-    client_id = app.config.get("MICROSOFT_CLIENT_ID")
-    client_secret = app.config.get("MICROSOFT_CLIENT_SECRET")
-    if not client_id or not client_secret:
-        return
-
-    tenant_id = app.config.get("MICROSOFT_TENANT_ID", "organizations")
-    microsoft_oauth.register(
-        name="microsoft",
-        client_id=client_id,
-        client_secret=client_secret,
-        server_metadata_url=(
-            f"https://login.microsoftonline.com/{tenant_id}/v2.0/"
-            ".well-known/openid-configuration"
-        ),
-        client_kwargs={"scope": "openid profile email"},
-    )
-
-
-def _email_uses_allowed_domain(email):
-    if not isinstance(email, str) or email.count("@") != 1:
-        return False
-    address, domain = email.strip().lower().rsplit("@", 1)
-    allowed_domain = current_app.config.get("MICROSOFT_EMAIL_DOMAIN", "")
-    return bool(address) and bool(allowed_domain) and domain == allowed_domain
+SIGNUP_EMAIL_DOMAIN = "alexu.edu.eg"
+SIGNUP_OTP_LIFETIME = timedelta(minutes=15)
+SIGNUP_OTP_MAX_ATTEMPTS = 5
+SIGNUP_OTP_RESEND_COOLDOWN = timedelta(seconds=60)
 
 
 def _establish_session(user):
@@ -78,14 +54,6 @@ def _establish_session(user):
     session["profile_id"] = user.id
     session["auth_token"] = auth_token
     session["auth_last_activity"] = time.time()
-
-
-def _microsoft_client():
-    if not current_app.config.get("MICROSOFT_CLIENT_ID") or not current_app.config.get(
-        "MICROSOFT_CLIENT_SECRET"
-    ):
-        return None
-    return microsoft_oauth.create_client("microsoft")
 
 
 def _issue_password_reset(user):
@@ -186,147 +154,237 @@ def login():
     return render_template("auth/login.html")
 
 
-@auth_pages.get("/login/microsoft")
-def microsoft_login():
-    client = _microsoft_client()
-    if client is None:
-        flash("Microsoft sign-in is not configured yet.", "error")
-        return redirect(url_for("auth_pages.login"))
-
-    redirect_uri = current_app.config.get("MICROSOFT_REDIRECT_URI") or url_for(
-        "auth_pages.microsoft_callback", _external=True
-    )
-    return client.authorize_redirect(redirect_uri)
-
-
-@auth_pages.get("/login/microsoft/callback")
-def microsoft_callback():
-    client = _microsoft_client()
-    if client is None:
-        flash("Microsoft sign-in is not configured yet.", "error")
-        return redirect(url_for("auth_pages.login"))
-
-    try:
-        token = client.authorize_access_token()
-    except OAuthError as error:
-        current_app.logger.warning("Microsoft sign-in failed: %s", error.error)
-        flash("Microsoft sign-in could not be completed. Please try again.", "error")
-        return redirect(url_for("auth_pages.login"))
-
-    identity = token.get("userinfo")
-    email = (
-        next(
-            (
-                candidate.strip().lower()
-                for candidate in (
-                    identity.get("email"),
-                    identity.get("preferred_username"),
-                )
-                if isinstance(candidate, str)
-                and _email_uses_allowed_domain(candidate)
-            ),
-            None,
-        )
-        if identity
-        else None
-    )
-    name = identity.get("name") if identity else None
-    if not _email_uses_allowed_domain(email):
-        flash("Use your university Microsoft account to continue.", "error")
-        return redirect(url_for("auth_pages.login"))
-
-    email = email.strip().lower()
-    user = Profile.query.filter(func.lower(Profile.primary_email) == email).first()
-    if user:
-        if user.role not in ROLE_VALUES:
-            flash("This account has an unsupported role.", "error")
-            return redirect(url_for("auth_pages.login"))
-        _establish_session(user)
-        return redirect(url_for("home"))
-
-    session["microsoft_signup"] = {
-        "email": email,
-        "name": (
-            name.strip()
-            if isinstance(name, str) and name.strip()
-            else email.split("@", 1)[0]
-        ),
-    }
-    return redirect(url_for("auth_pages.microsoft_signup"))
-
-
-@auth_pages.route("/signup/microsoft", methods=["GET", "POST"])
-def microsoft_signup():
-    identity = session.get("microsoft_signup")
-    if (
-        not isinstance(identity, dict)
-        or not _email_uses_allowed_domain(identity.get("email"))
-        or not isinstance(identity.get("name"), str)
-    ):
-        session.pop("microsoft_signup", None)
-        flash("Continue with your university Microsoft account to sign up.", "error")
-        return redirect(url_for("auth_pages.login"))
-
-    email = identity["email"].strip().lower()
-    name = identity["name"].strip()
+@auth_pages.route("/signup", methods=["GET", "POST"])
+@csrf_protect
+def signup():
     if request.method == "POST":
-        expected_csrf_token = session.get("_csrf_token")
-        submitted_csrf_token = request.form.get("_csrf_token")
-        if (
-            not isinstance(expected_csrf_token, str)
-            or not isinstance(submitted_csrf_token, str)
-            or not compare_digest(expected_csrf_token, submitted_csrf_token)
-        ):
-            abort(400)
-
-        department = request.form.get("department", "")
-        student_id = request.form.get("student_id", "").strip() or None
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        department = request.form.get("department", "").strip()
+        student_id = request.form.get("student_id", "").strip()
         valid_departments = {code for code, _ in FOE_DEPARTMENTS}
 
+        if not name or len(name) > 255:
+            flash("Enter your name (255 characters or fewer).", "error")
+            return redirect(url_for("auth_pages.signup"))
+        if (
+            len(email) > 255
+            or re.fullmatch(
+                rf"[^@\s]+@{re.escape(SIGNUP_EMAIL_DOMAIN)}", email
+            )
+            is None
+        ):
+            flash(
+                f"Use a valid email ending in @{SIGNUP_EMAIL_DOMAIN}.",
+                "error",
+            )
+            return redirect(url_for("auth_pages.signup"))
+        if not password_meets_policy(password):
+            flash("Password must be at least 8 characters with 1 number or symbol.", "error")
+            return redirect(url_for("auth_pages.signup"))
         if department not in valid_departments:
             flash("Choose a valid department.", "error")
-            return redirect(url_for("auth_pages.microsoft_signup"))
-        if student_id is not None and len(student_id) > 255:
-            flash("University ID must be 255 characters or fewer.", "error")
-            return redirect(url_for("auth_pages.microsoft_signup"))
-        if student_id and Profile.query.filter_by(student_id=student_id).first():
-            flash("An account with that University ID already exists.", "error")
-            return redirect(url_for("auth_pages.microsoft_signup"))
-
-        user = Profile.query.filter(func.lower(Profile.primary_email) == email).first()
-        if user is None:
-            user = Profile(
-                name=name[:255],
-                primary_email=email,
-                password_hash=generate_password_hash(secrets.token_urlsafe(32)),
-                role=STUDENT_ROLE,
-                student_id=student_id,
-                department=department,
+            return redirect(url_for("auth_pages.signup"))
+        if not student_id or len(student_id) > 255:
+            flash(
+                "University ID is required and must be 255 characters or fewer.",
+                "error",
             )
-            db.session.add(user)
-            try:
-                db.session.commit()
-            except IntegrityError:
-                db.session.rollback()
-                if Profile.query.filter(func.lower(Profile.primary_email) == email).first():
-                    flash("An account with this email already exists. Sign in with Outlook.", "error")
-                    return redirect(url_for("auth_pages.login"))
-                if student_id and Profile.query.filter_by(student_id=student_id).first():
-                    flash("An account with that University ID already exists.", "error")
-                    return redirect(url_for("auth_pages.microsoft_signup"))
-                raise
-        elif user.role not in ROLE_VALUES:
-            flash("This account has an unsupported role.", "error")
+            return redirect(url_for("auth_pages.signup"))
+        now = utc_now()
+        expired_signups = PendingSignup.query.filter(
+            PendingSignup.expires_at <= now
+        ).delete(synchronize_session=False)
+        if expired_signups:
+            db.session.commit()
+        if Profile.query.filter(
+            func.lower(Profile.primary_email) == email
+        ).first():
+            flash("An account with this email already exists. Please log in.", "error")
             return redirect(url_for("auth_pages.login"))
+        if Profile.query.filter_by(student_id=student_id).first():
+            flash("An account with that University ID already exists.", "error")
+            return redirect(url_for("auth_pages.signup"))
+        pending_id = PendingSignup.query.filter_by(student_id=student_id).first()
+        if pending_id and pending_id.email != email:
+            flash("A signup with that University ID is already pending.", "error")
+            return redirect(url_for("auth_pages.signup"))
 
+        pending = PendingSignup.query.filter_by(email=email).first()
+        if pending and now - pending.requested_at < SIGNUP_OTP_RESEND_COOLDOWN:
+            session["signup_email"] = email
+            flash("A verification code was just sent. Check your email.", "success")
+            return redirect(url_for("auth_pages.verify_signup_otp"))
+
+        if pending is None:
+            pending = PendingSignup(email=email)
+            db.session.add(pending)
+        pending.name = name
+        pending.password_hash = generate_password_hash(password)
+        pending.department = department
+        pending.student_id = student_id
+        verification_code = _prepare_signup_verification(pending)
+        try:
+            db.session.flush()
+        except IntegrityError:
+            db.session.rollback()
+            if Profile.query.filter(
+                func.lower(Profile.primary_email) == email
+            ).first():
+                flash("An account with this email already exists. Please log in.", "error")
+                return redirect(url_for("auth_pages.login"))
+            if Profile.query.filter_by(student_id=student_id).first():
+                flash("An account with that University ID already exists.", "error")
+                return redirect(url_for("auth_pages.signup"))
+            raise
+
+        session["signup_email"] = email
+        try:
+            _send_signup_verification(pending, verification_code)
+        except PasswordResetEmailError:
+            current_app.logger.exception("Failed to send a signup verification email.")
+            session.pop("signup_email", None)
+            flash("Unable to send the verification email. Please try again later.", "error")
+            return redirect(url_for("auth_pages.signup"))
+
+        flash("A verification code has been sent to your university email.", "success")
+        return redirect(url_for("auth_pages.verify_signup_otp"))
+
+    return render_template("auth/signup.html", departments=FOE_DEPARTMENTS)
+
+
+def _prepare_signup_verification(pending):
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    pending.code_hash = generate_password_hash(code)
+    pending.expires_at = utc_now() + SIGNUP_OTP_LIFETIME
+    pending.attempts = 0
+    pending.requested_at = utc_now()
+    return code
+
+
+def _send_signup_verification(pending, code):
+    db.session.commit()
+    try:
+        send_signup_verification_email(pending.email, code)
+    except PasswordResetEmailError:
+        db.session.delete(pending)
+        db.session.commit()
+        raise
+
+
+@auth_pages.route("/signup/verify", methods=["GET", "POST"])
+@csrf_protect
+def verify_signup_otp():
+    email = session.get("signup_email")
+    if not isinstance(email, str):
+        return redirect(url_for("auth_pages.signup"))
+
+    pending = PendingSignup.query.filter_by(email=email).first()
+    if not pending or utc_now() >= pending.expires_at:
+        if pending:
+            db.session.delete(pending)
+            db.session.commit()
+        session.pop("signup_email", None)
+        flash("Verification code expired. Please sign up again.", "error")
+        return redirect(url_for("auth_pages.signup"))
+
+    if request.method == "POST":
+        if pending.attempts >= SIGNUP_OTP_MAX_ATTEMPTS:
+            flash("Too many incorrect codes. Request a new code to continue.", "error")
+            return redirect(url_for("auth_pages.signup"))
+
+        entered_code = "".join(request.form.getlist("digits")).strip()
+        code_is_valid = (
+            len(entered_code) == 6
+            and entered_code.isdecimal()
+            and check_password_hash(pending.code_hash, entered_code)
+        )
+        if not code_is_valid:
+            pending.attempts += 1
+            db.session.commit()
+            flash("Invalid verification code. Try again.", "error")
+            return redirect(url_for("auth_pages.verify_signup_otp"))
+
+        if Profile.query.filter(
+            func.lower(Profile.primary_email) == email
+        ).first():
+            db.session.delete(pending)
+            db.session.commit()
+            session.pop("signup_email", None)
+            flash("An account with this email already exists. Please log in.", "error")
+            return redirect(url_for("auth_pages.login"))
+        if Profile.query.filter_by(student_id=pending.student_id).first():
+            db.session.delete(pending)
+            db.session.commit()
+            session.pop("signup_email", None)
+            flash("An account with that University ID already exists.", "error")
+            return redirect(url_for("auth_pages.signup"))
+
+        user = Profile(
+            name=pending.name,
+            primary_email=pending.email,
+            password_hash=pending.password_hash,
+            role=STUDENT_ROLE,
+            student_id=pending.student_id,
+            department=pending.department,
+        )
+        db.session.add(user)
+        db.session.delete(pending)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            if Profile.query.filter(
+                func.lower(Profile.primary_email) == email
+            ).first():
+                flash("An account with this email already exists. Please log in.", "error")
+                session.pop("signup_email", None)
+                return redirect(url_for("auth_pages.login"))
+            if Profile.query.filter_by(student_id=pending.student_id).first():
+                flash("An account with that University ID already exists.", "error")
+                session.pop("signup_email", None)
+                return redirect(url_for("auth_pages.signup"))
+            raise
+
+        session.pop("signup_email", None)
         _establish_session(user)
         return redirect(url_for("home"))
 
-    return render_template(
-        "auth/microsoft_signup.html",
-        identity=identity,
-        departments=FOE_DEPARTMENTS,
-    )
+    return render_template("auth/verify_signup_otp.html")
+
+
+@auth_pages.post("/signup/resend-otp")
+@csrf_protect
+def resend_signup_otp():
+    email = session.get("signup_email")
+    if not isinstance(email, str):
+        return redirect(url_for("auth_pages.signup"))
+
+    pending = PendingSignup.query.filter_by(email=email).first()
+    if not pending or utc_now() >= pending.expires_at:
+        if pending:
+            db.session.delete(pending)
+            db.session.commit()
+        session.pop("signup_email", None)
+        flash("Signup expired. Please submit the form again.", "error")
+        return redirect(url_for("auth_pages.signup"))
+
+    if utc_now() - pending.requested_at < SIGNUP_OTP_RESEND_COOLDOWN:
+        flash("Please wait a minute before requesting another code.", "error")
+        return redirect(url_for("auth_pages.verify_signup_otp"))
+
+    verification_code = _prepare_signup_verification(pending)
+    try:
+        _send_signup_verification(pending, verification_code)
+    except PasswordResetEmailError:
+        current_app.logger.exception("Failed to resend a signup verification email.")
+        session.pop("signup_email", None)
+        flash("Unable to send the verification email. Please try again later.", "error")
+        return redirect(url_for("auth_pages.signup"))
+
+    flash("A new verification code has been sent.", "success")
+    return redirect(url_for("auth_pages.verify_signup_otp"))
 
 
 @auth_pages.post("/logout")

@@ -1,0 +1,52 @@
+{% extends "auth/auth_base.html" %}
+
+{% block title %}Sign up – Student Hub{% endblock %}
+{% block card_attrs %}aria-labelledby="signup-title"{% endblock %}
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='app/css/login.css') }}">
+{% endblock %}
+
+{% block auth_content %}
+  <header class="welcome">
+    <h1 id="signup-title">Create your account</h1>
+    <p>Sign up with your @alexu.edu.eg email address.</p>
+  </header>
+
+  <form class="login-form" action="{{ url_for('auth_pages.signup') }}" method="post">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <div class="credentials">
+      <div class="field">
+        <label for="signup-name">Name</label>
+        <input id="signup-name" name="name" type="text" maxlength="255" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label for="signup-email">University email</label>
+        <input id="signup-email" name="email" type="email" maxlength="255" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="signup-password">Password</label>
+        <input id="signup-password" name="password" type="password" autocomplete="new-password" required>
+        <small class="field-help">At least 8 characters and one number or symbol.</small>
+      </div>
+      <div class="field">
+        <label for="signup-department">Department</label>
+        <select id="signup-department" name="department" required>
+          <option value="">Choose your department</option>
+          {% for code, label in departments %}
+            <option value="{{ code }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="signup-student-id">University ID</label>
+        <input id="signup-student-id" name="student_id" type="text" maxlength="255" autocomplete="off" required>
+      </div>
+    </div>
+    <button class="btn-primary" type="submit">Continue</button>
+  </form>
+
+  <p class="signup-prompt">
+    Already have an account?
+    <a href="{{ url_for('auth_pages.login') }}">Log in</a>
+  </p>
+{% endblock %}

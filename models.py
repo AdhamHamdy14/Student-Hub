@@ -358,6 +358,34 @@ class PasswordReset(db.Model):
         return f"<PasswordReset {self.id}: Profile {self.profile_id}>"
 
 
+class PendingSignup(db.Model):
+    __tablename__ = "pending_signup"
+
+    id = db.Column(BIGINT_ID, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    department = db.Column(db.String(255), nullable=False)
+    student_id = db.Column(db.String(255), unique=True, nullable=False)
+    code_hash = db.Column(db.String(255), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    attempts = db.Column(
+        db.Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    requested_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=utc_now,
+        server_default=db.func.current_timestamp(),
+    )
+
+    def __repr__(self):
+        return f"<PendingSignup {self.id}: {self.email}>"
+
+
 class SavedItem(db.Model):
     __tablename__ = "saved_items"
 

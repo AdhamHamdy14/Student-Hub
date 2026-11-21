@@ -16,6 +16,9 @@ def csrf_token():
 def csrf_protect(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
+        if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+            return view(*args, **kwargs)
+
         expected = session.get("_csrf_token")
         submitted = request.form.get("_csrf_token")
         if (
