@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="events-container">
+<div class="ev-container">
   <a href="{{ url_for('events_pages.events') }}" class="back-link">← Back to all events</a>
 
   <div class="details-layout">
@@ -16,11 +16,21 @@
     <div class="details-main-card">
       <div class="event-badges">
         <span class="event-category-tag">{{ event.category or 'Event' }}</span>
-        {% if event.registration_status == 'open' %}
-          <span class="status-badge status-open">Registration Open</span>
-        {% else %}
-          <span class="status-badge status-closed">{{ event.registration_status|capitalize }}</span>
-        {% endif %}
+        <div class="badge-cluster">
+          {% if is_low_seats %}
+            <span class="status-badge status-spots-left">{{ seats_left }} spot{{ '' if seats_left == 1 else 's' }} left</span>
+          {% endif %}
+
+          {% if is_ended %}
+            <span class="status-badge status-ended">Ended</span>
+          {% elif is_registered %}
+            <span class="status-badge status-registered">Registered ✓</span>
+          {% elif event.registration_status == 'open' %}
+            <span class="status-badge status-open">Registration Open</span>
+          {% else %}
+            <span class="status-badge status-closed">{{ event.registration_status|capitalize }}</span>
+          {% endif %}
+        </div>
       </div>
 
       <h1 class="details-title">{{ event.event_name }}</h1>
@@ -119,18 +129,32 @@
 
       {% if is_registered %}
         <div class="already-registered-box">
-          ✓ You are already registered for this event.
+          ✓ You are registered for this event.
         </div>
         <a href="{{ url_for('events_pages.event_registered', event_id=event.id) }}" class="btn-event-primary btn-full">
           View Confirmation Pass
         </a>
-        <form action="{{ url_for('events_pages.cancel_registration', event_id=event.id) }}" method="POST" style="margin-top: 10px;">
-          <button type="submit" class="btn-event-secondary btn-full">
+        {% if not is_ended %}
+        <form
+          action="{{ url_for('events_pages.cancel_registration', event_id=event.id) }}"
+          method="POST"
+          class="js-confirm-form"
+          data-confirm="Are you sure you want to cancel your registration?"
+          style="margin-top: 10px;"
+        >
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-event-cancel btn-full">
             Cancel Registration
           </button>
         </form>
-      {% elif event.registration_status == 'open' %}
+        {% endif %}
+      {% elif is_ended %}
+        <button type="button" class="btn-disabled btn-full" disabled>
+          Event Ended
+        </button>
+      {% elif event.registration_status == 'open' and (seats_left is none or seats_left > 0) %}
         <form action="{{ url_for('events_pages.event_details', event_id=event.id) }}" method="POST" class="register-form">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
           <div class="form-group">
             <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #374151; cursor: pointer;">
               <input type="checkbox" name="reminder" value="1" checked>
@@ -144,7 +168,7 @@
         </form>
       {% else %}
         <button type="button" class="btn-disabled btn-full" disabled>
-          Registration Closed
+          {{ 'Event Full' if (seats_left is not none and seats_left <= 0) else 'Registration Closed' }}
         </button>
       {% endif %}
     </aside>
