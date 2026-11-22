@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Student Hub - Campus Events{% endblock %}
+{% block title %}Student Hub - Campus Events & Workshops{% endblock %}
 {% block body_class %}events-student{% endblock %}
 
 {% block extra_head %}
@@ -9,129 +9,221 @@
 {% endblock %}
 
 {% block content %}
-<div class="events-container">
-  <header class="events-header">
-    <div class="events-title-group">
-      <h1 class="events-title">Campus Events &amp; Workshops</h1>
-      <p class="events-subtitle">Discover student chapter workshops, technical talks, and competitions at FOE-AU.</p>
-    </div>
-  </header>
-
-  <!-- Category Filter Pills -->
-  <div class="events-filters" id="categoryFilters">
-    <div class="events-filter-pills" role="group" aria-label="Filter events by category">
-      <button type="button" class="filter-pill active" data-category="all">All Events</button>
-      <button type="button" class="filter-pill" data-category="Workshop">Workshops</button>
-      <button type="button" class="filter-pill" data-category="Seminar">Seminars &amp; Talks</button>
-      <button type="button" class="filter-pill" data-category="Competition">Competitions</button>
-    </div>
-    <label class="events-search">
-      <span aria-hidden="true">⌕</span>
-      <input
-        type="search"
-        id="eventSearchInput"
-        class="events-search-input"
-        placeholder="Search events..."
-        aria-label="Search events"
-      >
-    </label>
-  </div>
-
-  <!-- Events Grid from Supabase -->
-  {% if events %}
-  <div class="events-grid" id="eventsGrid">
-    {% for event in events %}
-    <article
-      class="event-card"
-      data-category="{{ event.category or 'Other' }}"
-      data-search="{{ (event.event_name ~ ' ' ~ event.organizer ~ ' ' ~ event.location)|lower }}"
-    >
-      <div class="event-card-top">
-        <div class="event-badges">
-          <span class="event-category-tag">{{ event.category or 'General' }}</span>
-          {% if event.id in registered_event_ids %}
-            <span class="status-badge status-registered">Registered ✓</span>
-          {% elif event.registration_status == 'open' %}
-            {% if event.capacity is not none and seats_left_by_event_id[event.id] <= 10 %}
-              {% set seats_left = seats_left_by_event_id[event.id] %}
-              <span class="status-badge status-spots-left">{{ seats_left }} spot{{ '' if seats_left == 1 else 's' }} left</span>
-            {% else %}
-              <span class="status-badge status-open">Open</span>
-            {% endif %}
-          {% else %}
-            <span class="status-badge status-closed">{{ event.registration_status|capitalize }}</span>
-          {% endif %}
+<div class="ev-container">
+  <div class="ev-workspace">
+    <!-- Left Vertical Sidebar (Unified with Lost & Found and Used Items) -->
+    <aside class="ev-sidebar">
+      <div class="ev-sidebar-top">
+        <div class="sidebar-group">
+          <div class="sidebar-heading">Event Views</div>
+          <a href="{{ url_for('events_pages.events', view='all', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'all' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>📋</span><span>All Events</span></span>
+            <span class="sidebar-count">{{ counts.all }}</span>
+          </a>
+          <a href="{{ url_for('events_pages.events', view='registered', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'registered' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>✅</span><span>My Registrations</span></span>
+            <span class="sidebar-count">{{ counts.registered }}</span>
+          </a>
+          <a href="{{ url_for('events_pages.events', view='starred', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'starred' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>⭐</span><span>Starred Events</span></span>
+            <span class="sidebar-count">{{ counts.starred }}</span>
+          </a>
+          <a href="{{ url_for('events_pages.events', view='open', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'open' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>🟢</span><span>Open Spots</span></span>
+            <span class="sidebar-count">{{ counts.open }}</span>
+          </a>
+          <a href="{{ url_for('events_pages.events', view='ended', category=active_category, q=search_query) }}"
+             class="sidebar-item {% if active_view == 'ended' %}active{% endif %}">
+            <span class="sidebar-item-left"><span>🕒</span><span>Ended Events</span></span>
+            <span class="sidebar-count">{{ counts.ended }}</span>
+          </a>
         </div>
 
-        <h2 class="event-card-title">{{ event.event_name }}</h2>
-        <p class="event-organizer">By {{ event.organizer }}</p>
+        <div class="sidebar-group">
+          <div class="sidebar-heading">Categories</div>
+          <a href="{{ url_for('events_pages.events', view=active_view, q=search_query) }}"
+             class="sidebar-item {% if not active_category %}active{% endif %}">
+            <span class="sidebar-item-left"><span>🗂️</span><span>All Categories</span></span>
+          </a>
+          {% for cat in categories %}
+          <a href="{{ url_for('events_pages.events', view=active_view, category=cat, q=search_query) }}"
+             class="sidebar-item {% if active_category|lower == cat|lower %}active{% endif %}">
+            <span class="sidebar-item-left"><span>📌</span><span>{{ cat }}</span></span>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </aside>
 
-        <div class="event-meta-list">
-          <div class="event-meta-item">
-            <svg class="meta-icon"><use href="#cal"></use></svg>
-            <span>{{ event.date.strftime('%a, %d %b %Y') if event.date else 'Date TBA' }}</span>
+    <!-- Main Content -->
+    <main>
+      <header class="ev-header">
+        <div>
+          <h1 class="ev-title">Campus Events &amp; Workshops</h1>
+          <p class="ev-subtitle">Discover student chapter workshops, technical talks, and competitions at FOE-AU.</p>
+        </div>
+
+        <form method="get" action="{{ url_for('events_pages.events') }}" class="ev-search-box">
+          <input type="hidden" name="view" value="{{ active_view }}">
+          {% if active_category %}
+          <input type="hidden" name="category" value="{{ active_category }}">
+          {% endif %}
+          <span aria-hidden="true">🔍</span>
+          <input
+            type="search"
+            id="eventSearchInput"
+            name="q"
+            value="{{ search_query }}"
+            class="ev-search-input"
+            placeholder="Search events, organizers, rooms..."
+            aria-label="Search events"
+          >
+        </form>
+      </header>
+
+      {% if cards %}
+      <div class="events-grid" id="eventsGrid">
+        {% for item in cards %}
+        {% set ev = item.event %}
+        <article
+          class="event-card {% if item.is_ended %}is-ended{% endif %}"
+          data-category="{{ (ev.category or 'Other')|lower }}"
+          data-search="{{ (ev.event_name ~ ' ' ~ ev.organizer ~ ' ' ~ ev.location ~ ' ' ~ (ev.category or ''))|lower }}"
+          data-registered="{{ 'true' if item.is_registered else 'false' }}"
+          data-starred="{{ 'true' if item.is_starred else 'false' }}"
+          data-open="{{ 'true' if item.is_open else 'false' }}"
+          data-ended="{{ 'true' if item.is_ended else 'false' }}"
+        >
+          <div class="event-card-top">
+            <div class="event-badges">
+              <span class="event-category-tag">{{ ev.category or 'General' }}</span>
+
+              <div class="badge-cluster">
+                {% if item.is_low_seats %}
+                  <span class="status-badge status-spots-left">{{ item.seats_left }} spot{{ '' if item.seats_left == 1 else 's' }} left</span>
+                {% endif %}
+
+                {% if item.is_ended %}
+                  <span class="status-badge status-ended">Ended</span>
+                {% elif item.is_registered %}
+                  <span class="status-badge status-registered">Registered ✓</span>
+                {% elif ev.registration_status != 'open' %}
+                  <span class="status-badge status-closed">{{ ev.registration_status|capitalize }}</span>
+                {% elif item.is_full %}
+                  <span class="status-badge status-closed">Full</span>
+                {% else %}
+                  <span class="status-badge status-open">Open</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <h2 class="event-card-title">
+              <a href="{{ url_for('events_pages.event_details', event_id=ev.id) }}">{{ ev.event_name }}</a>
+            </h2>
+            <p class="event-organizer">By {{ ev.organizer }}</p>
+
+            <div class="event-meta-list">
+              <div class="event-meta-item">
+                <svg class="meta-icon"><use href="#cal"></use></svg>
+                <span>{{ ev.date.strftime('%a, %d %b %Y') if ev.date else 'Date TBA' }}</span>
+              </div>
+
+              <div class="event-meta-item">
+                <svg class="meta-icon"><use href="#clock"></use></svg>
+                <span>
+                  {% if ev.start_time and ev.end_time %}
+                    {{ ev.start_time.strftime('%I:%M %p') }} – {{ ev.end_time.strftime('%I:%M %p') }}
+                  {% else %}
+                    Time TBA
+                  {% endif %}
+                </span>
+              </div>
+
+              <div class="event-meta-item">
+                <svg class="meta-icon"><use href="#pin"></use></svg>
+                <span>{{ ev.location }}</span>
+              </div>
+            </div>
           </div>
 
-          <div class="event-meta-item">
-            <svg class="meta-icon"><use href="#clock"></use></svg>
-            <span>
-              {% if event.start_time and event.end_time %}
-                {{ event.start_time.strftime('%I:%M %p') }} – {{ event.end_time.strftime('%I:%M %p') }}
+          <div class="event-card-footer">
+            <span class="event-capacity">
+              {% if ev.capacity is none %}
+                Capacity: <strong>Unlimited</strong>
+              {% elif item.is_ended %}
+                Capacity: <strong>{{ ev.capacity }}</strong> seats
               {% else %}
-                Time TBA
+                Remaining: <strong>{{ item.seats_left }}</strong> / {{ ev.capacity }}
               {% endif %}
             </span>
-          </div>
 
-          <div class="event-meta-item">
-            <svg class="meta-icon"><use href="#pin"></use></svg>
-            <span>{{ event.location }}</span>
+            <div class="event-actions">
+              <form
+                class="star-event-form"
+                action="{{ url_for('events_pages.toggle_star_event', event_id=ev.id) }}"
+                method="post"
+              >
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button
+                  type="submit"
+                  class="btn-event-star{% if item.is_starred %} is-starred{% endif %}"
+                  aria-label="{% if item.is_starred %}Remove {{ ev.event_name }} from starred events{% else %}Add {{ ev.event_name }} to starred events{% endif %}"
+                  aria-pressed="{{ 'true' if item.is_starred else 'false' }}"
+                  title="{% if item.is_starred %}Remove from starred events{% else %}Add to starred events{% endif %}"
+                >
+                  <svg class="star-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/>
+                  </svg>
+                </button>
+              </form>
+
+              {% if item.is_registered %}
+                <a href="{{ url_for('events_pages.event_details', event_id=ev.id) }}" class="btn-event-secondary">
+                  <span>View Details</span>
+                </a>
+                {% if not item.is_ended %}
+                <form
+                  action="{{ url_for('events_pages.cancel_registration', event_id=ev.id) }}"
+                  method="post"
+                  class="inline-form js-confirm-form"
+                  data-confirm="Cancel your registration for {{ ev.event_name }}?"
+                >
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn-event-cancel-sm">Cancel</button>
+                </form>
+                {% endif %}
+              {% elif item.is_ended or not item.is_open %}
+                <a href="{{ url_for('events_pages.event_details', event_id=ev.id) }}" class="btn-event-secondary">
+                  <span>View Details</span>
+                </a>
+              {% else %}
+                <a href="{{ url_for('events_pages.event_details', event_id=ev.id) }}" class="btn-event-primary">
+                  <span>View &amp; Register</span>
+                  <svg class="btn-icon"><use href="#arrow"></use></svg>
+                </a>
+              {% endif %}
+            </div>
           </div>
-        </div>
+        </article>
+        {% endfor %}
       </div>
 
-      <div class="event-card-footer">
-        <span class="event-capacity">Capacity: <strong>{% if event.capacity is not none %}{{ event.capacity }}{% else %}Unlimited{% endif %}</strong>{% if event.capacity is not none %} seats{% endif %}</span>
-        <div class="event-actions">
-          {% set is_starred = event.id in starred_event_ids %}
-          <form
-            class="star-event-form"
-            action="{{ url_for('events_pages.toggle_star_event', event_id=event.id) }}"
-            method="post"
-          >
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <button
-              type="submit"
-              class="btn-event-star{% if is_starred %} is-starred{% endif %}"
-              aria-label="{% if is_starred %}Remove {{ event.event_name }} from starred events{% else %}Add {{ event.event_name }} to starred events{% endif %}"
-              aria-pressed="{{ 'true' if is_starred else 'false' }}"
-              title="{% if is_starred %}Remove from starred events{% else %}Add to starred events{% endif %}"
-            >
-              <svg class="star-icon" aria-hidden="true" viewBox="0 0 24 24">
-                <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/>
-              </svg>
-            </button>
-          </form>
-          {% if event.id in registered_event_ids %}
-            <a href="{{ url_for('events_pages.event_details', event_id=event.id) }}" class="btn-event-secondary">
-              <span>Registered ✓</span>
-            </a>
-          {% else %}
-            <a href="{{ url_for('events_pages.event_details', event_id=event.id) }}" class="btn-event-primary">
-              <span>View &amp; Register</span>
-              <svg class="btn-icon"><use href="#arrow"></use></svg>
-            </a>
-          {% endif %}
-        </div>
+      {% else %}
+      <div class="empty-state-card">
+        {% if active_view != 'all' or active_category or search_query %}
+        <h3>No events match your filters</h3>
+        <p>Try selecting another view or category from the left sidebar.</p>
+        {% else %}
+        <h3>No upcoming events right now</h3>
+        <p>Check back soon for new workshops and student chapter activities at FOE-AU.</p>
+        {% endif %}
       </div>
-    </article>
-    {% endfor %}
+      {% endif %}
+    </main>
   </div>
-  {% else %}
-  <div class="empty-state-card">
-    <h3>No upcoming events right now</h3>
-    <p>Check back soon for new workshops and student chapter activities at FOE-AU.</p>
-  </div>
-  {% endif %}
 </div>
 {% endblock %}

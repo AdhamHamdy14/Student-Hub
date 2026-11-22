@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="events-container confirmation-wrapper">
+<div class="ev-container confirmation-wrapper">
   <div class="confirmation-card">
     <div class="success-icon-circle">✓</div>
 
@@ -48,7 +48,16 @@
 
     <div class="confirmation-actions">
       <a href="{{ url_for('events_pages.events') }}" class="btn-event-primary">Browse More Events</a>
-      <a href="{{ url_for('home') }}" class="btn-event-secondary">Back to Home</a>
+      <a href="{{ url_for('events_pages.event_details', event_id=event.id) }}" class="btn-event-secondary">View Details</a>
+      <form
+        action="{{ url_for('events_pages.cancel_registration', event_id=event.id) }}"
+        method="post"
+        class="inline-form js-confirm-form"
+        data-confirm="Cancel your registration for {{ event.event_name }}?"
+      >
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-event-cancel-soft">Cancel Registration</button>
+      </form>
     </div>
   </div>
 </div>
