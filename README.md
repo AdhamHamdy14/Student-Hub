@@ -1,5 +1,26 @@
 # Student Hub
 
+Student Hub is a Flask web application for Alexandria University Faculty of
+Engineering students and staff. It provides role-specific dashboards and
+features for events, labs, a used-items marketplace, and lost-and-found reports.
+
+## Current features
+
+- Student registration with university email verification and password recovery.
+- Dashboards and permissions for students, teaching assistants, event managers,
+  and admins.
+- Event browsing, registration, reminders, and event management.
+- Lab browsing and management for admins and department-specific TAs. Student
+  lab booking is not currently implemented.
+- Used-item and lost-and-found posts with search, filters, and owner controls.
+- Admin account management, including verified signups, alphabetical sorting,
+  search, role filtering, and protected account deletion.
+- Read-only department and University ID profile details, versioned CSS/JS
+  assets, and 356-day immutable asset caching.
+
+See [WORK_REPORT.md](WORK_REPORT.md) for detailed documentation of the current
+routes, roles, data model, security behavior, and known limitations.
+
 ## Run locally
 
 From the project directory, create and activate a virtual environment, then install

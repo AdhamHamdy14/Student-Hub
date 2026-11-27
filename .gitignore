@@ -10,3 +10,4 @@ tests/*
 venv/
 .venv/
 seed.py
+WORK_REPORT.md

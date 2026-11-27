@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "source": "/static/app/css/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=30758400, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/static/app/js/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=30758400, immutable"
+        }
+      ]
+    }
+  ]
+}

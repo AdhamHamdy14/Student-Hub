@@ -1,7 +1,9 @@
 import os
 import time
 from datetime import timedelta
+from hashlib import sha256
 from hmac import compare_digest
+from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, flash, g, redirect, render_template, request, session, url_for
@@ -25,6 +27,7 @@ from services.roles import ADMIN_ROLE, EVENT_MANAGER_ROLE, role_label
 load_dotenv()
 
 app = Flask(__name__, static_folder="public/static", static_url_path="/static")
+STATIC_ASSET_CACHE_AGE = 356 * 24 * 60 * 60
 secret_key = os.getenv("SECRET_KEY")
 if not secret_key:
     raise RuntimeError("SECRET_KEY must be configured with a strong random value.")
@@ -63,6 +66,31 @@ app.register_blueprint(event_management_pages)
 app.register_blueprint(home_pages)
 app.register_blueprint(lost_found_pages)
 app.register_blueprint(used_items_pages)
+
+
+@app.url_defaults
+def version_static_assets(endpoint, values):
+    if endpoint != "static":
+        return
+
+    filename = values.get("filename")
+    if not isinstance(filename, str):
+        return
+
+    relative_path = Path(filename)
+    if (
+        relative_path.suffix.lower() not in {".css", ".js"}
+        or relative_path.parts[:2] not in {("app", "css"), ("app", "js")}
+    ):
+        return
+
+    static_root = Path(app.static_folder).resolve()
+    asset_path = (static_root / relative_path).resolve()
+    if not asset_path.is_relative_to(static_root) or not asset_path.is_file():
+        return
+
+    values.setdefault("v", sha256(asset_path.read_bytes()).hexdigest()[:16])
+
 
 app.add_url_rule("/used-items", endpoint="used_items", view_func=app.view_functions["used_items_pages.used_items"])
 
@@ -122,6 +150,31 @@ def load_current_user():
     session.permanent = True
     session["auth_last_activity"] = now
     g.current_user = user
+
+
+@app.after_request
+def prevent_authenticated_page_caching(response):
+    static_filename = (
+        request.view_args.get("filename", "")
+        if request.view_args
+        else ""
+    )
+    if (
+        request.endpoint == "static"
+        and response.status_code == 200
+        and isinstance(static_filename, str)
+        and static_filename.lower().endswith((".css", ".js"))
+    ):
+        response.headers["Cache-Control"] = (
+            f"public, max-age={STATIC_ASSET_CACHE_AGE}, immutable"
+        )
+    elif getattr(g, "current_user", None) is not None:
+        response.headers["Cache-Control"] = (
+            "private, no-store, no-cache, must-revalidate"
+        )
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 @app.route("/")

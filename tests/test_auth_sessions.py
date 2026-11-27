@@ -2,6 +2,7 @@ import os
 import time
 import unittest
 from datetime import date, time as time_of_day, timedelta
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -439,6 +440,28 @@ class AuthenticationSessionTests(unittest.TestCase):
         response = first_device.get("/events", follow_redirects=True)
         self.assertIn(b"Your session is no longer active", response.data)
 
+    def test_logout_prevents_authenticated_pages_from_being_restored(self):
+        client = app.test_client()
+        self.login(client)
+
+        protected_page = client.get("/home")
+        self.assertIn("no-store", protected_page.headers["Cache-Control"])
+        protected_page.close()
+
+        logout_response = client.post("/logout")
+        self.assertEqual(logout_response.status_code, 302)
+        self.assertIn("no-store", logout_response.headers["Cache-Control"])
+        logout_response.close()
+
+        back_response = client.get("/home")
+        self.assertEqual(back_response.status_code, 302)
+        self.assertEqual(back_response.location, "/login")
+        back_response.close()
+
+        with app.app_context():
+            profile = db.session.get(Profile, 1)
+            self.assertIsNone(profile.tokens)
+
     def test_inactive_session_expires_and_revokes_its_token(self):
         client = app.test_client()
         self.login(client)
@@ -467,6 +490,27 @@ class AuthenticationSessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"body.labs-admin", response.data)
         response.close()
+
+    def test_css_and_javascript_assets_are_versioned_and_long_lived(self):
+        client = app.test_client()
+        login_page = client.get("/login")
+        static_root = Path(__file__).resolve().parents[1] / "public" / "static"
+
+        for asset_path in ("app/css/login.css", "app/js/login.js"):
+            version = sha256((static_root / asset_path).read_bytes()).hexdigest()[:16]
+            asset_url = f"/static/{asset_path}?v={version}"
+            self.assertIn(asset_url.encode(), login_page.data)
+
+            asset_response = client.get(asset_url)
+            self.assertEqual(asset_response.status_code, 200)
+            self.assertIn(
+                "max-age=30758400",
+                asset_response.headers["Cache-Control"],
+            )
+            self.assertIn("immutable", asset_response.headers["Cache-Control"])
+            asset_response.close()
+
+        login_page.close()
 
     def test_mobile_navigation_links_to_profile_page(self):
         client = app.test_client()
