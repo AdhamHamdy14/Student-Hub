@@ -28,7 +28,17 @@
           <label for="password">Password</label>
           <a class="reset-link" href="{{ url_for('auth_pages.forgot_password') }}">Reset password</a>
         </div>
-        <input id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
+        <div class="password-input">
+          <input id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
+          <button
+            class="password-toggle"
+            type="button"
+            data-password-toggle
+            aria-controls="password"
+            aria-label="Show password"
+            aria-pressed="false"
+          >Show</button>
+        </div>
       </div>
     </div>
 
@@ -39,4 +49,8 @@
     Don't have an account?
     <a href="{{ url_for('auth_pages.signup') }}">Sign up</a>
   </p>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='app/js/login.js') }}" defer></script>
 {% endblock %}

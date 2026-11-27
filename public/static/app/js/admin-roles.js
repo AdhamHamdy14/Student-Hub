@@ -28,6 +28,45 @@ function initializeAccountDialog() {
       if (dialog instanceof HTMLDialogElement) dialog.showModal();
     });
   });
+
+  const search = document.querySelector("#account-search");
+  const roleFilter = document.querySelector("#account-role-filter");
+  const accountRows = [...document.querySelectorAll("[data-account-row]")];
+  const accountCount = document.querySelector("[data-account-count]");
+  const emptyState = document.querySelector("[data-empty-state]");
+
+  const filterAccounts = () => {
+    const searchTerm = search?.value.trim().toLowerCase() || "";
+    const selectedRole = roleFilter?.value || "";
+    let visibleCount = 0;
+
+    accountRows.forEach((row) => {
+      const matchesSearch = row.dataset.accountSearch
+        .toLowerCase()
+        .includes(searchTerm);
+      const matchesRole = !selectedRole || row.dataset.accountRole === selectedRole;
+      const isVisible = matchesSearch && matchesRole;
+      row.hidden = !isVisible;
+      if (isVisible) visibleCount += 1;
+    });
+
+    if (accountCount) {
+      accountCount.textContent = `${visibleCount} ${visibleCount === 1 ? "account" : "accounts"}`;
+    }
+    if (emptyState) emptyState.hidden = visibleCount > 0;
+  };
+
+  search?.addEventListener("input", filterAccounts);
+  roleFilter?.addEventListener("change", filterAccounts);
+
+  document.querySelectorAll("[data-confirm-delete]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      const accountName = form.getAttribute("data-confirm-delete");
+      if (!window.confirm(`Delete the account for "${accountName}" and its related data?`)) {
+        event.preventDefault();
+      }
+    });
+  });
 }
 
 document.addEventListener("DOMContentLoaded", initializeAccountDialog);

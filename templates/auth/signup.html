@@ -12,6 +12,11 @@
     <p>Sign up with your @alexu.edu.eg email address.</p>
   </header>
 
+  <p class="signup-notice" role="note">
+    <strong>Important:</strong> Department and University ID cannot be edited after signup.
+    To request a correction, please contact an administrator.
+  </p>
+
   <form class="login-form" action="{{ url_for('auth_pages.signup') }}" method="post">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <div class="credentials">

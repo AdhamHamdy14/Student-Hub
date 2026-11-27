@@ -19,6 +19,7 @@ from models import (
     Lab,
     LabReservation,
     LabSlot,
+    Notification,
     PendingSignup,
     PasswordReset,
     Profile,
@@ -172,9 +173,20 @@ class AuthenticationSessionTests(unittest.TestCase):
         login_page = client.get("/login")
         self.assertNotIn(b"Continue with Outlook", login_page.data)
         self.assertIn(b"Sign up", login_page.data)
+        self.assertIn(b'class="password-toggle"', login_page.data)
+        self.assertIn(b'aria-pressed="false"', login_page.data)
+        self.assertIn(b"/static/app/js/login.js", login_page.data)
+        login_script_response = client.get("/static/app/js/login.js")
+        self.assertEqual(login_script_response.status_code, 200)
+        login_script_response.close()
 
         signup_page = client.get("/signup")
         self.assertEqual(signup_page.status_code, 200)
+        self.assertIn(
+            b"Department and University ID cannot be edited after signup.",
+            signup_page.data,
+        )
+        self.assertIn(b"contact an administrator", signup_page.data)
         csrf = self.csrf_token(client, "/signup")
         signup_data = {
             "_csrf_token": csrf,
@@ -220,6 +232,68 @@ class AuthenticationSessionTests(unittest.TestCase):
             self.assertEqual(user.student_id, "S12345")
             self.assertEqual(user.role, "student")
             self.assertFalse(PendingSignup.query.filter_by(email=user.primary_email).first())
+            admin = db.session.get(Profile, 1)
+            admin.role = "admin"
+            db.session.commit()
+
+        admin_client = app.test_client()
+        self.login(admin_client)
+        roles_page = admin_client.get("/admin/roles/")
+        self.assertEqual(roles_page.status_code, 200)
+        self.assertIn(b"New Student", roles_page.data)
+        self.assertIn(b"account-search", roles_page.data)
+        self.assertIn(b"account-role-filter", roles_page.data)
+        self.assertLess(
+            roles_page.data.index(b'data-account-search="New Student'),
+            roles_page.data.index(b'data-account-search="Test Student'),
+        )
+
+    def test_admin_can_delete_account_and_related_profile_data(self):
+        with app.app_context():
+            admin = db.session.get(Profile, 1)
+            admin.role = "admin"
+            target = Profile(
+                id=2,
+                name="Account to Delete",
+                primary_email="delete@example.com",
+                password_hash=generate_password_hash("password123"),
+                department="CSE",
+            )
+            db.session.add(target)
+            db.session.flush()
+            db.session.add(
+                Notification(
+                    profile_id=target.id,
+                    title="Test notification",
+                    description="This should be removed with the account.",
+                )
+            )
+            db.session.commit()
+
+        admin_client = app.test_client()
+        self.login(admin_client)
+        self.csrf_token(admin_client, "/admin/roles/")
+        with admin_client.session_transaction() as auth_session:
+            csrf = auth_session["_csrf_token"]
+
+        self_delete_response = admin_client.post(
+            "/admin/roles/1/delete",
+            data={"_csrf_token": csrf},
+            follow_redirects=True,
+        )
+        self.assertIn(
+            b"You cannot delete your own administrator account.",
+            self_delete_response.data,
+        )
+
+        response = admin_client.post(
+            "/admin/roles/2/delete",
+            data={"_csrf_token": csrf},
+        )
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            self.assertIsNone(db.session.get(Profile, 2))
+            self.assertEqual(Notification.query.filter_by(profile_id=2).count(), 0)
 
     def test_signup_rejects_non_university_email_and_invalid_department(self):
         client = app.test_client()
@@ -433,7 +507,8 @@ class AuthenticationSessionTests(unittest.TestCase):
                     primary_email="other@example.com",
                     secondary_email="taken@example.com",
                     password_hash=generate_password_hash("password123"),
-                    department="Testing",
+                    department="CSE",
+                    student_id="UNI-2002",
                 )
             )
             db.session.commit()
@@ -443,6 +518,10 @@ class AuthenticationSessionTests(unittest.TestCase):
         profile_page = client.get("/profile/")
         self.assertEqual(profile_page.status_code, 200)
         self.assertIn(b"profile.css", profile_page.data)
+        self.assertIn(b"Department", profile_page.data)
+        self.assertIn(b"University ID", profile_page.data)
+        self.assertNotIn(b'name="department"', profile_page.data)
+        self.assertNotIn(b'name="student_id"', profile_page.data)
         with client.session_transaction() as auth_session:
             csrf = auth_session["_csrf_token"]
 
@@ -453,6 +532,8 @@ class AuthenticationSessionTests(unittest.TestCase):
                 "name": "Updated Student",
                 "phone_number": "+201012345678",
                 "secondary_email": "backup@example.com",
+                "department": "MIE",
+                "student_id": "UNI-1001",
                 "primary_email": "changed@example.com",
             },
             follow_redirects=True,
@@ -464,6 +545,8 @@ class AuthenticationSessionTests(unittest.TestCase):
             self.assertEqual(profile.phone_number, "+201012345678")
             self.assertEqual(profile.secondary_email, "backup@example.com")
             self.assertEqual(profile.primary_email, "student@example.com")
+            self.assertEqual(profile.department, "Testing")
+            self.assertIsNone(profile.student_id)
 
         response = client.post(
             "/profile/update",

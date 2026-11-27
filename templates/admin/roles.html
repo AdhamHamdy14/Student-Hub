@@ -92,10 +92,30 @@
       <h2>Existing accounts</h2>
       <p>Review and edit account details and access.</p>
     </div>
-    <span class="role-count">{{ profiles|length }} {{ "account" if profiles|length == 1 else "accounts" }}</span>
+    <span class="role-count" data-account-count>{{ profiles|length }} {{ "account" if profiles|length == 1 else "accounts" }}</span>
   </header>
+  <div class="role-list-controls" aria-label="Filter accounts">
+    <div class="role-filter-field">
+      <label for="account-search">Search accounts</label>
+      <input id="account-search" type="search" placeholder="Search name, email, or university ID" autocomplete="off">
+    </div>
+    <div class="role-filter-field">
+      <label for="account-role-filter">Filter by role</label>
+      <select id="account-role-filter">
+        <option value="">All roles</option>
+        {% for choice in role_choices %}
+          <option value="{{ choice.value }}">{{ choice.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
   {% for profile in profiles %}
-    <article class="role-row">
+    <article
+      class="role-row"
+      data-account-row
+      data-account-search="{{ profile.name }} {{ profile.primary_email }} {{ profile.student_id or '' }}"
+      data-account-role="{{ profile.role }}"
+    >
       <div class="role-account">
         <strong>{{ profile.name }}</strong>
         <span>{{ profile.primary_email }}</span>
@@ -104,13 +124,21 @@
         <span class="role-current-label">Current role</span>
         <strong>{{ role_label(profile.role) }}</strong>
       </div>
-      <button
-        class="role-edit-trigger"
-        type="button"
-        data-edit-dialog="edit-account-dialog-{{ profile.id }}"
-        aria-haspopup="dialog"
-        aria-controls="edit-account-dialog-{{ profile.id }}"
-      >Edit</button>
+      <div class="role-actions">
+        <button
+          class="role-edit-trigger"
+          type="button"
+          data-edit-dialog="edit-account-dialog-{{ profile.id }}"
+          aria-haspopup="dialog"
+          aria-controls="edit-account-dialog-{{ profile.id }}"
+        >Edit</button>
+        {% if profile.id != g.current_user.id %}
+          <form method="post" action="{{ url_for('admin_roles_pages.delete_account', profile_id=profile.id) }}" data-confirm-delete="{{ profile.name }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="role-delete-trigger" type="submit">Delete</button>
+          </form>
+        {% endif %}
+      </div>
     </article>
 
     <dialog
@@ -183,6 +211,9 @@
   {% else %}
     <p class="role-empty">No accounts are available yet.</p>
   {% endfor %}
+  {% if profiles %}
+    <p class="role-empty" data-empty-state hidden>No accounts match your search and role filters.</p>
+  {% endif %}
 </section>
 {% endblock %}
 

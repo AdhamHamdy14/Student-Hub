@@ -5,7 +5,18 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
-from models import Profile, db
+from models import (
+    EventReservation,
+    LabReservation,
+    LostAndFound,
+    Notification,
+    PasswordReset,
+    Profile,
+    SavedItem,
+    StarredEvent,
+    UsedItem,
+    db,
+)
 from services.csrf import csrf_protect
 from services.passwords import password_meets_policy
 from services.roles import (
@@ -29,7 +40,10 @@ def require_admin():
 
 @admin_roles_pages.get("/")
 def index():
-    profiles = Profile.query.order_by(Profile.primary_email.asc()).all()
+    profiles = Profile.query.order_by(
+        func.lower(Profile.name).asc(),
+        func.lower(Profile.primary_email).asc(),
+    ).all()
     return render_template(
         "admin/roles.html",
         profiles=profiles,
@@ -37,6 +51,45 @@ def index():
         departments=FOE_DEPARTMENTS,
         department_codes={code for code, _ in FOE_DEPARTMENTS},
     )
+
+
+@admin_roles_pages.post("/<int:profile_id>/delete")
+@csrf_protect
+def delete_account(profile_id):
+    profile = db.session.get(Profile, profile_id)
+    if profile is None:
+        abort(404)
+    if profile.id == g.current_user.id:
+        flash("You cannot delete your own administrator account.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+    if (
+        profile.role == ADMIN_ROLE
+        and Profile.query.filter_by(role=ADMIN_ROLE).count() <= 1
+    ):
+        flash("The last administrator cannot be deleted.", "error")
+        return redirect(url_for("admin_roles_pages.index"))
+
+    owned_item_ids = db.session.query(UsedItem.id).filter_by(profile_id=profile.id)
+    SavedItem.query.filter(
+        (SavedItem.profile_id == profile.id)
+        | SavedItem.used_item_id.in_(owned_item_ids)
+    ).delete(synchronize_session=False)
+    for model in (
+        LabReservation,
+        EventReservation,
+        LostAndFound,
+        Notification,
+        PasswordReset,
+        StarredEvent,
+        UsedItem,
+    ):
+        model.query.filter_by(profile_id=profile.id).delete(synchronize_session=False)
+
+    email = profile.primary_email
+    db.session.delete(profile)
+    db.session.commit()
+    flash(f"Account deleted for {email}.", "success")
+    return redirect(url_for("admin_roles_pages.index"))
 
 
 @admin_roles_pages.post("/create")

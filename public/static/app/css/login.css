@@ -37,9 +37,50 @@
   font-weight: 400;
 }
 
+.password-input {
+  position: relative;
+}
+
+.password-input input {
+  padding-right: 72px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  padding: 6px 4px;
+  color: var(--primary);
+  background: transparent;
+  border: 0;
+  font: 600 12px/20px var(--font);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.password-toggle:hover {
+  color: var(--primary-hover);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
 .field-help {
   margin-top: -6px;
   color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.signup-notice {
+  padding: 12px 14px;
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
   font-size: 12px;
   line-height: 18px;
 }
