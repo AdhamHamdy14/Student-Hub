@@ -17,6 +17,7 @@ from models import (
     Event,
     EventReservation,
     Lab,
+    LabReservation,
     LabSlot,
     PendingSignup,
     PasswordReset,
@@ -74,6 +75,91 @@ class AuthenticationSessionTests(unittest.TestCase):
         client.get(path)
         with client.session_transaction() as auth_session:
             return auth_session["_csrf_token"]
+
+    def test_home_dashboard_adapts_to_each_account_role(self):
+        role_profiles = [
+            Profile(
+                name="Test TA",
+                primary_email="ta@example.com",
+                password_hash=generate_password_hash("password123"),
+                role="ta:CSE",
+                department="CSE",
+            ),
+            Profile(
+                name="Test Event Manager",
+                primary_email="manager@example.com",
+                password_hash=generate_password_hash("password123"),
+                role="event_manager",
+                department="CSE",
+            ),
+            Profile(
+                name="Test Admin",
+                primary_email="admin@example.com",
+                password_hash=generate_password_hash("password123"),
+                role="admin",
+                department="CSE",
+            ),
+        ]
+        with app.app_context():
+            db.session.add_all(role_profiles)
+            db.session.commit()
+            ta = Profile.query.filter_by(primary_email="ta@example.com").one()
+            student = Profile.query.filter_by(primary_email="student@example.com").one()
+            lab = Lab(
+                name="Computer Systems Lab",
+                department="CSE",
+                capacity=20,
+                room="C-304",
+            )
+            event = Event(
+                event_name="Embedded Systems Workshop",
+                organizer="Student Hub",
+                location="Main Hall",
+                date=date.today(),
+                start_time=time_of_day(10, 0),
+                end_time=time_of_day(12, 0),
+                capacity=2,
+                category="Workshop",
+            )
+            db.session.add_all([lab, event])
+            db.session.flush()
+            slot = LabSlot(
+                lab_id=lab.id,
+                date=date.today(),
+                start_time=time_of_day(8, 0),
+                end_time=time_of_day(10, 0),
+                capacity=2,
+            )
+            db.session.add(slot)
+            db.session.flush()
+            db.session.add_all(
+                [
+                    LabReservation(profile_id=ta.id, slot_id=slot.id),
+                    EventReservation(profile_id=student.id, event_id=event.id),
+                ]
+            )
+            db.session.commit()
+
+        dashboards = [
+            ("student@example.com", b"Student Portal", b"Your Upcoming Schedule"),
+            ("ta@example.com", b"CSE Lab Supervisor", b"Upcoming Department Lab Sessions"),
+            ("manager@example.com", b"Event Organizer", b"Upcoming Managed Events"),
+            ("admin@example.com", b"System Administration", b"Recent Campus Activity"),
+        ]
+        for email, role_tag, workspace_title in dashboards:
+            with self.subTest(role=email):
+                client = app.test_client()
+                self.login(client, email=email)
+                response = client.get("/home")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(role_tag, response.data)
+                self.assertIn(workspace_title, response.data)
+                if email == "ta@example.com":
+                    self.assertIn(b"1 / 2 booked", response.data)
+                elif email == "manager@example.com":
+                    self.assertIn(b"1 / 2 registered", response.data)
+                elif email == "admin@example.com":
+                    self.assertIn(b"1 lab booking", response.data)
 
     def test_password_is_stored_as_a_hash(self):
         with app.app_context():

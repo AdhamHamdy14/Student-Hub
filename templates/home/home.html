@@ -8,124 +8,155 @@
 {% endblock %}
 
 {% block content %}
-<section class="hero">
-  <span class="hero-pill">🎓 Faculty of Engineering • Alexandria University</span>
-  <h1>Welcome back, {{ g.current_user.name }}</h1>
-  <p>Book open engineering labs, register for student workshops, exchange used kits, or check lost &amp; found reports—all in one place.</p>
-</section>
-
-<section class="stats">
-  <div class="stat">
-    <div class="stat-icon ic-blue"><svg><use href="#flask"/></svg></div>
-    <div class="stat-num">{{ active_labs_count }}</div>
-    <div class="stat-label">Active Lab Reservations</div>
-    <div class="stat-next">
-      {% if next_lab %}
-        Next: {{ next_lab[2].name }}<br>({{ next_lab[1].date.strftime('%a, %d %b') }}, {{ next_lab[1].start_time.strftime('%I:%M %p') }})
-      {% else %}
-        No upcoming lab slots booked
-      {% endif %}
+<div class="role-home">
+  <section class="dashboard-hero">
+    <div class="hero-copy">
+      <span class="hero-pill"><span class="hero-dot"></span>Faculty of Engineering · Alexandria University <span class="hero-role">{{ role_tag }}</span></span>
+      <h1>Welcome back, {{ g.current_user.name }}</h1>
+      <p>{{ subtitle }}</p>
     </div>
-  </div>
-
-  <div class="stat">
-    <div class="stat-icon ic-green"><svg><use href="#cal"/></svg></div>
-    <div class="stat-num">{{ upcoming_events_count }}</div>
-    <div class="stat-label">Upcoming Events</div>
-    <div class="stat-next">
-      {% if next_event %}
-        Next: {{ next_event[1].event_name }}
-      {% else %}
-        No upcoming registered events
-      {% endif %}
+    <div class="hero-actions">
+      <a class="hero-action hero-action-primary" href="{{ primary_action.url }}">{{ primary_action.label }}<svg aria-hidden="true"><use href="#arrow"/></svg></a>
+      <a class="hero-action hero-action-secondary" href="{{ secondary_action.url }}">{{ secondary_action.label }}<svg aria-hidden="true"><use href="#arrow"/></svg></a>
     </div>
-  </div>
+  </section>
 
-  <div class="stat">
-    <div class="stat-icon ic-purple"><svg><use href="#doc"/></svg></div>
-    <div class="stat-num">{{ total_listings_count }}</div>
-    <div class="stat-label">Active Listings &amp; Reports</div>
-    <div class="stat-next">{{ used_items_count }} Used Item{{ '' if used_items_count == 1 else 's' }} • {{ lost_found_count }} Lost &amp; Found</div>
-  </div>
-</section>
-
-<section class="panels">
-  <div class="panel">
-    <div class="panel-head">
-      <h2 class="panel-title">Your Upcoming Schedule</h2>
-      <a href="{{ url_for('events_pages.events') }}" class="view-all">View all <svg><use href="#arrow"/></svg></a>
-    </div>
-
-    <div class="schedule">
-      {% if schedule_items %}
-        {% for item in schedule_items %}
-        <a href="{{ item.url }}" class="event">
-          <div class="date">
-            <small>{{ item.month }}</small>
-            <b>{{ item.day }}</b>
-            <small>{{ item.weekday }}</small>
-          </div>
-          <div>
-            <div class="event-title">{{ item.title }}</div>
-            <div class="meta">
-              <span><svg><use href="#clock"/></svg>{{ item.time_str }}</span>
-              <span><svg><use href="#pin"/></svg>{{ item.location }}</span>
-            </div>
-            {% if item.kind == 'event' %}
-              <span class="tag">Event</span>
-            {% else %}
-              <span class="tag tag-lab">Lab Slot</span>
-            {% endif %}
-          </div>
-          <span class="status {{ item.status_class }}">{{ item.status }}</span>
-        </a>
-        {% endfor %}
-      {% else %}
-        <div class="empty-panel-state">
-          <p>You have no upcoming lab reservations or registered events.</p>
-          <a href="{{ url_for('events_pages.events') }}" class="empty-cta">Browse Campus Events →</a>
-        </div>
-      {% endif %}
-    </div>
-
-    <div class="panel-foot"><svg><use href="#clock"/></svg>All times are local · FOE-AU campus</div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-head">
-      <div class="notif-head-left">
-        <h2 class="panel-title">Notifications</h2>
-        <span class="new-badge" id="notifUnreadBadge" {% if unread_count == 0 %}hidden{% endif %}>{{ unread_count }} new</span>
+  <section class="dashboard-stats" aria-label="Dashboard overview">
+    {% for kpi in kpis %}
+    <article class="dashboard-stat">
+      <div class="stat-icon stat-icon-{{ kpi.tone }}">
+        {% if kpi.icon == "flask" %}<svg aria-hidden="true"><use href="#flask"/></svg>
+        {% elif kpi.icon == "cal" %}<svg aria-hidden="true"><use href="#cal"/></svg>
+        {% else %}<svg aria-hidden="true"><use href="#doc"/></svg>{% endif %}
       </div>
-      <button
-        type="button"
-        class="mark-read"
-        id="markAllReadBtn"
-        data-url="{{ url_for('home_pages.mark_all_notifications_read') }}"
-        data-csrf="{{ csrf_token() }}"
-        {% if unread_count == 0 %}disabled{% endif %}
-      >
-        Mark all as read
-      </button>
-    </div>
+      <div class="stat-num">{{ kpi.value }}</div>
+      <h2 class="stat-label">{{ kpi.label }}</h2>
+      <p class="stat-detail">{{ kpi.detail }}</p>
+    </article>
+    {% endfor %}
+  </section>
 
-    <div class="notifs" id="notificationsList">
-      {% if notifications %}
-        {% for n in notifications %}
-        <div class="notif {{ n.accent_class }}">
-          <div class="notif-top">
-            <span class="notif-title">{{ n.title }}</span>
-            <span class="notif-time">{{ n.time_ago }}</span>
+  <section class="dashboard-panels">
+    <article class="dashboard-panel workspace-panel">
+      <header class="dashboard-panel-head">
+        <div>
+          <h2>{{ workspace_title }}</h2>
+          <p>{{ workspace_subtitle }}</p>
+        </div>
+        <a class="view-all" href="{{ workspace_action.url }}">{{ workspace_action.label }}<svg aria-hidden="true"><use href="#arrow"/></svg></a>
+      </header>
+
+      <div class="workspace-list">
+        {% if dashboard_role == "student" %}
+          {% for item in schedule_items %}
+          <a href="{{ item.url }}" class="schedule-item">
+            <div class="schedule-date">
+              <span>{{ item.month }}</span>
+              <b>{{ item.day }}</b>
+              <span>{{ item.weekday }}</span>
+            </div>
+            <div class="schedule-info">
+              <h3>{{ item.title }}</h3>
+              <p class="schedule-meta"><span><svg aria-hidden="true"><use href="#clock"/></svg>{{ item.time_str }}</span><span><svg aria-hidden="true"><use href="#pin"/></svg>{{ item.location }}</span></p>
+              <span class="schedule-tag {% if item.kind == 'lab' %}tag-lab{% endif %}">{{ "Lab slot" if item.kind == "lab" else "Campus event" }}</span>
+            </div>
+            <span class="status {{ item.status_class }}">{{ item.status }}</span>
+          </a>
+          {% else %}
+          <div class="empty-panel-state">
+            <p>You have no upcoming lab reservations or registered events.</p>
+            <a class="empty-cta" href="{{ url_for('events_pages.events') }}">Browse campus events <span aria-hidden="true">→</span></a>
           </div>
-          <p>{{ n.description }}</p>
+          {% endfor %}
+          <p class="panel-foot"><svg aria-hidden="true"><use href="#clock"/></svg>All times are local · FOE-AU campus</p>
+
+        {% elif dashboard_role == "ta" %}
+          {% for item in lab_items %}
+          <a href="{{ item.url }}" class="management-item">
+            <div class="management-item-head">
+              <div>
+                <h3>{{ item.title }}</h3>
+                <p>{{ item.meta }} · {{ item.date }} · {{ item.time }}</p>
+              </div>
+              <span class="status st-blue">{{ item.reserved }} / {{ item.capacity }} booked</span>
+            </div>
+            <div class="capacity-track" role="img" aria-label="{{ item.reserved }} of {{ item.capacity }} places reserved">
+              <span style="width: {{ [100, (item.reserved * 100 // item.capacity) if item.capacity else 0]|min }}%"></span>
+            </div>
+          </a>
+          {% else %}
+          <div class="empty-panel-state"><p>No active upcoming lab slots are scheduled for {{ g.current_user.department }}.</p><a class="empty-cta" href="{{ url_for('labs_pages.labs') }}">Manage department labs <span aria-hidden="true">→</span></a></div>
+          {% endfor %}
+
+        {% elif dashboard_role == "event_manager" %}
+          {% for item in event_items %}
+          <a href="{{ item.url }}" class="management-item">
+            <div class="management-item-head">
+              <div>
+                <h3>{{ item.title }}</h3>
+                <p>{{ item.meta }}</p>
+              </div>
+              {% if item.capacity %}<span class="status st-green">{{ item.registered }} / {{ item.capacity }} registered</span>
+              {% else %}<span class="status st-blue">{{ item.registered }} registered</span>{% endif %}
+            </div>
+            {% if item.capacity %}
+            <div class="capacity-track capacity-track-green" role="img" aria-label="{{ item.registered }} of {{ item.capacity }} seats registered">
+              <span style="width: {{ [100, (item.registered * 100 // item.capacity) if item.capacity else 0]|min }}%"></span>
+            </div>
+            {% endif %}
+          </a>
+          {% else %}
+          <div class="empty-panel-state"><p>No upcoming events have been created yet.</p><a class="empty-cta" href="{{ url_for('event_management_pages.new_event') }}">Create your first event <span aria-hidden="true">→</span></a></div>
+          {% endfor %}
+
+        {% else %}
+          {% for item in system_activity %}
+          <a href="{{ item.url }}" class="activity-item">
+            <span class="activity-mark {% if item.category == 'Lost & found' %}activity-mark-amber{% endif %}"></span>
+            <div>
+              <span class="activity-category">{{ item.category }}</span>
+              <h3>{{ item.title }}</h3>
+              <p>{{ item.meta }}</p>
+            </div>
+            <svg class="activity-arrow" aria-hidden="true"><use href="#arrow"/></svg>
+          </a>
+          {% else %}
+          <div class="empty-panel-state"><p>There are no active listings or reports to review.</p><a class="empty-cta" href="{{ url_for('used_items') }}">Browse used items <span aria-hidden="true">→</span></a></div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </article>
+
+    <article class="dashboard-panel notification-panel">
+      <header class="dashboard-panel-head">
+        <div class="notification-heading">
+          <h2>{% if dashboard_role == "admin" %}System Alerts{% else %}Notifications{% endif %}</h2>
+          <span class="new-badge" id="notifUnreadBadge" {% if unread_count == 0 %}hidden{% endif %}>{{ unread_count }} new</span>
         </div>
+        <button
+          type="button"
+          class="mark-read"
+          id="markAllReadBtn"
+          data-url="{{ url_for('home_pages.mark_all_notifications_read') }}"
+          data-csrf="{{ csrf_token() }}"
+          {% if unread_count == 0 %}disabled{% endif %}
+        >Mark all as read</button>
+      </header>
+
+      <div class="notifs" id="notificationsList">
+        {% for notification in notifications %}
+        <article class="notif {{ notification.accent_class }} {% if notification.is_read %}is-read{% endif %}">
+          <div class="notif-top">
+            <h3 class="notif-title">{{ notification.title }}</h3>
+            <time class="notif-time">{{ notification.time_ago }}</time>
+          </div>
+          <p>{{ notification.description }}</p>
+        </article>
+        {% else %}
+        <div class="empty-panel-state"><p>You're all caught up—no notifications yet.</p></div>
         {% endfor %}
-      {% else %}
-        <div class="empty-panel-state">
-          <p>You're all caught up—no notifications yet.</p>
-        </div>
-      {% endif %}
-    </div>
-  </div>
-</section>
+      </div>
+    </article>
+  </section>
+</div>
 {% endblock %}
